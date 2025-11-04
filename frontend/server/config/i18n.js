@@ -1,24 +1,27 @@
-import i18next from 'i18next';
-import Backend from 'i18next-fs-backend';
-import middleware from 'i18next-express-middleware';
+import i18next from "i18next";
+import Backend from "i18next-fs-backend";
+import middleware from "i18next-http-middleware";
+import path from "path";
+import { fileURLToPath } from "url";
 
-// Initialize i18next
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 i18next
   .use(Backend)
   .use(middleware.LanguageDetector)
   .init({
-    lng: 'en', // default language
-    fallbackLng: 'en',
-    debug: process.env.NODE_ENV === 'development',
-    
+    fallbackLng: "en",
+    supportedLngs: ["en", "fr", "de"], // ✅ replaces old "whitelist"
+    preload: ["en", "fr", "de"],
     backend: {
-      loadPath: './locales/{{lng}}.json'
+      loadPath: path.join(__dirname, "../locales/{{lng}}/translation.json"),
     },
-    
     detection: {
-      order: ['header', 'cookie', 'querystring'],
-      caches: ['cookie']
-    }
+      order: ["querystring", "cookie", "header"],
+      caches: ["cookie"],
+    },
+    debug: false,
   });
 
 export default i18next;

@@ -1,17 +1,17 @@
 import argparse
 import asyncio
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+import json
 from io import StringIO
 import sys
 import uvicorn
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from app.agent.manus import Manus
 from app.logger import logger
 
-
-# -----------------------  FASTAPI SECTION  -----------------------
 app = FastAPI(title="OpenManus API")
 
 app.add_middleware(
@@ -22,25 +22,46 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 class PromptRequest(BaseModel):
     prompt: str
-
 
 @app.on_event("startup")
 async def startup_event():
     app.state.agent = await Manus.create()
     logger.info("✅ Manus agent initialized.")
 
-
 @app.on_event("shutdown")
 async def shutdown_event():
     await app.state.agent.cleanup()
     logger.info("🧹 Manus agent cleaned up.")
 
+@app.get("/stream")
+async def stream_prompt(prompt: str, request: Request):
+    """SSE streaming endpoint for prompt generation."""
+    agent = app.state.agent
+
+    async def event_generator():
+        try:
+            async for line in agent.run_stream(prompt):
+                yield f"data: {json.dumps({'message': line})}\n\n"
+                await asyncio.sleep(0.05)
+        except Exception as e:
+            logger.error(f"❌ Stream crashed: {e}")
+            yield f"data: {json.dumps({'message': f'❌ Stream crashed: {e}'})}\n\n"
+        finally:
+            yield "event: end\ndata: {}\n\n"
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no"
+    }
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
 
 @app.post("/run")
 async def run_prompt(data: PromptRequest):
+    """Fallback non-stream endpoint."""
     prompt = data.prompt.strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="Prompt cannot be empty")
@@ -57,29 +78,8 @@ async def run_prompt(data: PromptRequest):
     output = buffer.getvalue()
     return {"status": "success", "output": output}
 
-
-# -----------------------  CLI SECTION  -----------------------
-async def run_cli(prompt: str | None):
-    """Run the Manus agent directly from CLI"""
-    agent = await Manus.create()
-    try:
-        text = prompt or input("Enter your prompt: ")
-        if not text.strip():
-            logger.warning("Empty prompt provided.")
-            return
-        logger.warning("Processing your request...")
-        await agent.run(text)
-        logger.info("Request processing completed.")
-    except KeyboardInterrupt:
-        logger.warning("Operation interrupted.")
-    finally:
-        await agent.cleanup()
-
-
 def run_api():
-    """Start FastAPI server (no nested asyncio.run)"""
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
-
 
 def main():
     parser = argparse.ArgumentParser(description="Run Manus agent (CLI or API mode)")
@@ -92,6 +92,16 @@ def main():
     else:
         asyncio.run(run_cli(args.prompt))
 
+async def run_cli(prompt: str | None):
+    agent = await Manus.create()
+    try:
+        text = prompt or input("Enter your prompt: ")
+        if not text.strip():
+            logger.warning("Empty prompt provided.")
+            return
+        await agent.run(text)
+    finally:
+        await agent.cleanup()
 
 if __name__ == "__main__":
     main()
