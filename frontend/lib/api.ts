@@ -1,21 +1,16 @@
 import axios from 'axios';
 
-// Dynamically choose the correct backend based on environment
-const API_BASE_URL =
-  import.meta.env.MODE === 'development'
-    ? (import.meta.env.VITE_API_URL || 'http://localhost:5000/api')
-    : (import.meta.env.VITE_API_URL_PROD || 'https://smart-agents-server.vercel.app/api');
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Create axios instance
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // ✅ Allow cookies/sessions for OAuth and login
 });
 
-// Attach token if available
+// Add token to requests if available
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -24,14 +19,17 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    return Promise.reject(error);
+  }
 );
 
-// Handle unauthorized errors globally
+// Handle response errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      // Clear token and redirect to login if unauthorized
       localStorage.removeItem('token');
       localStorage.removeItem('user');
     }
@@ -39,49 +37,60 @@ api.interceptors.response.use(
   }
 );
 
-// ===========================
-// 🔐 AUTH API FUNCTIONS
-// ===========================
+// Auth API functions
 export const authAPI = {
+  // Sign up new user
   signup: async (userData: { name: string; email: string; password: string }) => {
     const response = await api.post('/auth/signup', userData);
     return response.data;
   },
 
+  // Login user
   login: async (credentials: { email: string; password: string }) => {
     const response = await api.post('/auth/login', credentials);
     return response.data;
   },
 
-  oauthLogin: async (
-    provider: string,
-    userData: { email: string; name?: string; providerId?: string; picture?: string }
-  ) => {
-    const response = await api.post('/auth/oauth', { provider, userData });
+  // OAuth authentication
+  oauthLogin: async (provider: string, userData: { email: string; name?: string; providerId?: string; picture?: string }) => {
+    const response = await api.post('/auth/oauth', {
+      provider,
+      userData
+    });
     return response.data;
   },
 
+  // Get current user
   getCurrentUser: async () => {
     const response = await api.get('/auth/me');
     return response.data;
   },
 
+  // Logout (client-side)
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
   },
 };
 
-// ===========================
-// ⚙️  TOKEN + USER HELPERS
-// ===========================
-export const setAuthToken = (token: string) => localStorage.setItem('token', token);
-export const setAuthUser = (user: any) => localStorage.setItem('user', JSON.stringify(user));
-export const getAuthToken = () => localStorage.getItem('token');
+// Helper functions for token and user management
+export const setAuthToken = (token: string) => {
+  localStorage.setItem('token', token);
+};
+
+export const setAuthUser = (user: any) => {
+  localStorage.setItem('user', JSON.stringify(user));
+};
+
+export const getAuthToken = () => {
+  return localStorage.getItem('token');
+};
+
 export const getAuthUser = () => {
   const user = localStorage.getItem('user');
   return user ? JSON.parse(user) : null;
 };
+
 export const clearAuth = () => {
   localStorage.removeItem('token');
   localStorage.removeItem('user');

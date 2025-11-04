@@ -8,8 +8,9 @@ import { HomePage } from './components/HomePage';
 import { SandboxPage } from './components/SandboxPage';
 import { HistoryPage } from './components/HistoryPage';
 import { SettingsPage } from './components/SettingsPage';
-import  Pricing  from './components/Pricing'
- 
+import Pricing from './components/Pricing'
+import { BrowserRouter } from "react-router-dom";
+
 export interface ChatMessage {
   id: string;
   content: string;
@@ -106,19 +107,21 @@ export default function App() {
   }
 
   return (
-    <ThemeProvider>
-      <DashboardLayout currentPage={currentPage} onNavigate={handleNavigate} onLogout={handleLogout}>
-        {currentPage === 'home' && (
-          <HomePage 
-            onNavigateToSandbox={handleNavigateToSandboxWithAutoRun} 
-            continueSession={continueSession}
-          />
-        )}
-        {currentPage === 'sandbox' && <SandboxPage autoRun={sandboxAutoRun} />}
-        {currentPage === 'history' && <HistoryPage onContinueChat={handleContinueChat} />}
-        {currentPage === 'settings' && <SettingsPage />}
-        {currentPage === 'pricing' && <Pricing />}
-      </DashboardLayout>
-    </ThemeProvider>
+    <BrowserRouter>
+      <ThemeProvider>
+        <DashboardLayout currentPage={currentPage} onNavigate={handleNavigate} onLogout={handleLogout}>
+          {currentPage === 'home' && (
+            <HomePage
+              onNavigateToSandbox={handleNavigateToSandboxWithAutoRun}
+              continueSession={continueSession}
+            />
+          )}
+          {currentPage === 'sandbox' && <SandboxPage autoRun={sandboxAutoRun} />}
+          {currentPage === 'history' && <HistoryPage onContinueChat={handleContinueChat} />}
+          {currentPage === 'settings' && <SettingsPage />}
+          {currentPage === 'pricing' && <Pricing />}
+        </DashboardLayout>
+      </ThemeProvider>
+    </BrowserRouter>
   );
 }

@@ -25,6 +25,8 @@ interface HomePageProps {
 }
 
 export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps) {
+  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [prompt, setPrompt] = useState('');
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState('Nava ai');
@@ -36,6 +38,15 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
   const imageInputRef = useRef<HTMLInputElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Load email and username from localStorage on mount
+    const storedEmail = localStorage.getItem('email') || '';
+    const storedUsername = localStorage.getItem('username') || '';
+
+    setEmail(storedEmail);
+    setUsername(storedUsername || (storedEmail ? storedEmail.split('@')[0] : ''));
+  }, []);
 
   const aiModels = [
     "GPT-4",
@@ -279,7 +290,7 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
               </div>
 
               <h1 className="text-2xl sm:text-4xl mb-2 sm:mb-4 bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">
-                Hello Yeswanth Kosuri
+                Hello <span className="font-semibold">{username || 'User'}</span>
               </h1>
               <p className="text-base sm:text-xl text-muted-foreground mb-6 sm:mb-8">
                 What can I create for you today?

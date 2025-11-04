@@ -41,16 +41,6 @@ export function Navbar({ onToggleSidebar, onToggleAppPreview, showAppPreview, on
             Nava <span className="text-primary">AI</span>
           </span>
         </button>
-
-        <button
-          onClick={onToggleAppPreview}
-          className="text-foreground hover:text-[#7B61FF] transition-colors"
-        >
-          App
-        </button>
-        <button className="text-foreground hover:text-[#7B61FF] transition-colors">
-          Upgrade
-        </button>
       </div>
 
       {/* Right side */}

@@ -37,7 +37,7 @@ export function SandboxPage() {
       } else if (message.startsWith('⚙️')) {
         setSteps(prev => [...prev, { id: prev.length + 1, title: 'Processing', description: [message], icon: Settings }]);
       } else if (message.startsWith('🧩')) {
-        setSteps(prev => [...prev, { id: prev.length + 1, title: 'Reasoning', description: [message], icon: Code }]);
+        setSteps(prev => [...prev, { id: prev.length + 1, title: 'Reasoning', description: [], icon: Code }]);
       } else if (message.startsWith('💡 OUTPUT_START')) {
         hasOutputStarted = true;
         outputBuffer = '';
@@ -114,9 +114,8 @@ export function SandboxPage() {
                 </div>
               </div>
             ))}
-          </div>
 
-          <div className="p-4 border-t border-border/30">
+            <div className="p-4 border-t border-border/30">
             <div className="flex items-center space-x-3 bg-muted/30 rounded-lg p-3">
               <Search className="w-4 h-4 text-muted-foreground" />
               <Input
@@ -130,6 +129,8 @@ export function SandboxPage() {
               </Button>
             </div>
           </div>
+          </div>
+
         </div>
 
         {/* Output Panel */}
@@ -139,13 +140,25 @@ export function SandboxPage() {
               <Code className="w-4 h-4 mr-2 text-[#7B61FF]" /> Output
             </h3>
             {finalOutput && (
-              <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(finalOutput)}>
-                <Copy className="w-4 h-4 mr-2" /> Copy
+              <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => {
+                navigator.clipboard.writeText(finalOutput);
+                const btn = document.activeElement as HTMLButtonElement;
+                const originalText = btn.innerText;
+                btn.innerText = 'Copied!';
+                setTimeout(() => {
+                btn.innerText = originalText;
+                }, 2000);
+              }}
+              >
+              <Copy className="w-4 h-4 mr-2" /> Copy
               </Button>
             )}
           </div>
 
-          <div className="flex-1 p-6 bg-card/80 rounded-xl overflow-auto">
+          <div className="flex-1 bg-card/80 rounded-xl overflow-auto">
             {isGenerating ? (
               <p className="text-sm text-muted-foreground italic">Generating... please wait for steps to finish.</p>
             ) : finalOutput ? (

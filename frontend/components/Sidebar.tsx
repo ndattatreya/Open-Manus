@@ -109,7 +109,7 @@ export function Sidebar({ currentPage, onNavigate, isOpen, onClose }: SidebarPro
             <span>Favorites</span>
           </button>
           
-          <button 
+          {/*<button 
             onClick={() => onNavigate('sandbox')}
             className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-colors ${
               currentPage === 'sandbox' 
@@ -119,7 +119,7 @@ export function Sidebar({ currentPage, onNavigate, isOpen, onClose }: SidebarPro
           >
             <Calendar className="w-4 h-4" />
             <span>Sandbox</span>
-          </button>
+          </button>*/}
           <button
             onClick={() => {
               onNavigate('pricing');

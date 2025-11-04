@@ -8,13 +8,13 @@ interface OAuthConfig {
 
 // Google OAuth Configuration
 export const googleOAuthConfig: OAuthConfig = {
-  clientId: import.meta.env.GOOGLE_CLIENT_ID || '',
+  clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID || '',
   redirectUri: typeof window !== 'undefined' ? window.location.origin + '/auth/callback/google' : '',
   scope: 'email profile openid',
 };
 
 // Check if OAuth is configured
-export const isGoogleConfigured = () => !!import.meta.env.GOOGLE_CLIENT_ID;
+export const isGoogleConfigured = () => !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
 export const isMicrosoftConfigured = () => !!import.meta.env.VITE_MICROSOFT_CLIENT_ID;
 export const isAppleConfigured = () => !!import.meta.env.VITE_APPLE_CLIENT_ID;
 
