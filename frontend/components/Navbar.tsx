@@ -6,7 +6,6 @@ import { Bell, Moon, Sun, Menu, LogOut, UserPlus, Shield } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { MobileAppPreview } from './MobileAppPreview';
 import { ShiningStars } from './ShiningStars';
-import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface NavbarProps {
   onToggleSidebar: () => void;
@@ -81,17 +80,15 @@ export function Navbar({ onToggleSidebar, onToggleAppPreview, showAppPreview, on
           )}
         </button>
 
-        {/* Language Switcher */}
-        <LanguageSwitcher variant="ghost" size="sm" />
-
         {/* Profile with dropdown */}
         <DropdownMenu open={userDropdownOpen} onOpenChange={setUserDropdownOpen}>
           <DropdownMenuTrigger asChild>
             <button className="flex items-center space-x-3 hover:bg-muted/50 rounded-lg p-2 transition-colors">
               <Avatar className="w-8 h-8">
                 <AvatarFallback className="bg-gradient-to-r from-[#7B61FF] to-[#9F7AEA] text-white text-base rounded-full w-10 h-10 flex items-center justify-center">
-                  YK
+                  {username ? username.charAt(0).toUpperCase() : 'U'}
                 </AvatarFallback>
+
               </Avatar>
               <div className="hidden sm:block">
                 <div className="text-sm font-medium"><span className="font-semibold">{username || 'User'}</span></div>

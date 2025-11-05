@@ -1,50 +1,46 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useTranslation } from 'react-i18next';
 import { AnimatedSphere } from './AnimatedSphere';
 import { ShiningStars } from './ShiningStars';
 import { ImageWithFallback } from './figma/ImageWithFallback';
-import { LanguageSwitcher } from './LanguageSwitcher';
 import { Sparkles, Zap, Brain, Users, Code, Shield } from "lucide-react";
 
 interface LandingPageProps {
   onNavigateToLogin: () => void;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) => {
-  const { t } = useTranslation();
-  
+export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) => {  
   const features = [
-    {
-      icon: Brain,
-      title: t('features.aiPowered.title'),
-      description: t('features.aiPowered.description')
-    },
-    {
-      icon: Zap,
-      title: t('features.lightningFast.title'),
-      description: t('features.lightningFast.description')
-    },
-    {
-      icon: Code,
-      title: t('features.smartCode.title'),
-      description: t('features.smartCode.description')
-    },
-    {
-      icon: Sparkles,
-      title: t('features.interactiveSandbox.title'),
-      description: t('features.interactiveSandbox.description')
-    },
-    {
-      icon: Shield,
-      title: t('features.secure.title'),
-      description: t('features.secure.description')
-    },
-    {
-      icon: Users,
-      title: t('features.collaborative.title'),
-      description: t('features.collaborative.description')
-    }
-  ];
+  {
+    icon: Brain,
+    title: "AI-Powered Assistance",
+    description: "Harness the intelligence of Nava AI to create, analyze, and automate tasks efficiently."
+  },
+  {
+    icon: Zap,
+    title: "Lightning Fast",
+    description: "Get instant responses powered by real-time AI processing with minimal latency."
+  },
+  {
+    icon: Code,
+    title: "Smart Code Generation",
+    description: "Write, debug, and understand code effortlessly using built-in AI tools."
+  },
+  {
+    icon: Sparkles,
+    title: "Interactive Sandbox",
+    description: "Test ideas, code, and visualizations directly inside your browser environment."
+  },
+  {
+    icon: Shield,
+    title: "Secure & Reliable",
+    description: "Your data and projects are protected with top-tier encryption and privacy controls."
+  },
+  {
+    icon: Users,
+    title: "Collaborative Workspace",
+    description: "Work with teammates in real time on shared projects, notes, and code spaces."
+  }
+];
 
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
@@ -74,37 +70,35 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
               onClick={() => scrollToSection('about')}
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
-              {t('navigation.about')}
+              About
             </button>
             <button
               onClick={() => scrollToSection('features')}
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
-              {t('navigation.features')}
+              Features
             </button>
             <button
               onClick={() => scrollToSection('creators')}
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
-              {t('navigation.creators')}
+              Creators
             </button>
-            <LanguageSwitcher />
             <button
               onClick={onNavigateToLogin}
               className="px-6 py-2 rounded-lg bg-gradient-to-r from-[#7B61FF] to-[#3B82F6] text-white hover:shadow-glow transition-all"
             >
-              {t('navigation.login')}
+              Login
             </button>
           </div>
 
           {/* Mobile menu */}
           <div className="md:hidden flex items-center gap-2">
-            <LanguageSwitcher size="sm" />
             <button
               onClick={onNavigateToLogin}
               className="px-4 py-2 rounded-lg bg-gradient-to-r from-[#7B61FF] to-[#3B82F6] text-white"
             >
-              {t('navigation.login')}
+              Login
             </button>
           </div>
         </nav>
@@ -122,24 +116,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
               className="text-center lg:text-left"
             >
               <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold mb-3 sm:mb-5 bg-gradient-to-r from-[#7B61FF] to-[#3B82F6] bg-clip-text text-transparent leading-tight">
-                {t('landing.title')}
+                Welcome to Nava AI
               </h1>
 
               <p className="text-base sm:text-lg md:text-xl text-muted-foreground mb-6 sm:mb-8 px-2 sm:px-0">
-                {t('landing.subtitle')}
+                Transform your ideas into reality with our advanced AI-powered platform. Generate code, create applications, and innovate faster than ever before."
               </p>
               <div className="flex flex-col sm:flex-row justify-center lg:justify-start gap-4 sm:gap-6">
                 <button
                   onClick={onNavigateToLogin}
                   className="px-6 sm:px-8 py-3 rounded-xl bg-gradient-to-r from-[#7B61FF] to-[#3B82F6] text-white shadow-glow-hover transition-all w-full sm:w-auto"
                 >
-                  {t('landing.getStarted')}
+                  getStarted
                 </button>
                 <button
                   onClick={() => scrollToSection('features')}
                   className="px-6 sm:px-8 py-3 rounded-xl bg-card/50 backdrop-blur-sm hover:bg-card transition-all w-full sm:w-auto"
                 >
-                  {t('landing.learnMore')}
+                  learnMore
                 </button>
               </div>
             </motion.div>
@@ -169,9 +163,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
           >
-            <h2 className="text-4xl font-bold mb-4">{t('landing.aboutTitle')}</h2>
+            <h2 className="text-4xl font-bold mb-4">aboutTitle</h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              {t('landing.aboutDescription')}
+              aboutDescription
             </p>
           </motion.div>
 
@@ -234,9 +228,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
           >
-            <h2 className="text-4xl font-bold mb-4">{t('landing.featuresTitle')}</h2>
+            <h2 className="text-4xl font-bold mb-4">featuresTitle</h2>
             <p className="text-xl text-muted-foreground">
-              {t('landing.featuresSubtitle')}
+              featuresSubtitle
             </p>
           </motion.div>
 
@@ -445,9 +439,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
           >
-            <h2 className="text-4xl font-bold mb-4">{t('landing.creatorsTitle')}</h2>
+            <h2 className="text-4xl font-bold mb-4">creatorsTitle</h2>
             <p className="text-xl text-muted-foreground">
-              {t('landing.creatorsSubtitle')}
+              creatorsSubtitle
             </p>
           </motion.div>
 
@@ -539,16 +533,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
             transition={{ duration: 0.6 }}
           >
             <h2 className="text-4xl md:text-5xl font-bold mb-6">
-              {t('landing.ctaTitle')}
+              ctaTitle
             </h2>
             <p className="text-xl text-muted-foreground mb-8">
-              {t('landing.ctaSubtitle')}
+                ctaSubtitle
             </p>
             <button
               onClick={onNavigateToLogin}
               className="px-10 py-4 rounded-xl bg-gradient-to-r from-[#7B61FF] to-[#3B82F6] text-white text-lg shadow-glow-hover transition-all"
             >
-              {t('landing.startCreating')}
+              startCreating
             </button>
           </motion.div>
         </div>
@@ -562,7 +556,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
       {/* Footer */}
       <footer className="py-12 px-6">
         <div className="max-w-7xl mx-auto text-center text-muted-foreground">
-          <p>{t('landing.footer')}</p>
+          <p>footer</p>
         </div>
       </footer>
     </div>

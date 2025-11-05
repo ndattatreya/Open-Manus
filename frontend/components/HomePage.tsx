@@ -286,7 +286,7 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
   };
 
   return (
-    <div className="flex flex-col h-screen max-h-screen overflow-hidden bg-background">
+    <div className="flex flex-col h-screen max-h-screen overflow-hidden">
       {/* Scrollable Chat Messages Area */}
       <div
         ref={chatContainerRef}
@@ -299,7 +299,7 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
 
         {chatMessages.length === 0 ? (
           <div className="flex items-center justify-center min-h-full px-4 text-center">
-            <div className="max-w-md sm:max-w-2xl">
+            <div className=" sm:max-w-2xl">
               <div className="mb-6 sm:mb-8 flex justify-center scale-75 sm:scale-100">
                 <AnimatedSphere size="small" />
               </div>
@@ -387,7 +387,7 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
       {/* Fixed Footer */}
       {/* Fixed Footer - Input Area */}
       <div
-        className="sticky bottom-0 left-0 w-full bg-background border-t border-border z-20 backdrop-blur-md"
+        className="sticky bottom-0 left-0 w-full"
         style={{
           padding: "0.5rem 1rem",
           maxHeight: "30vh",

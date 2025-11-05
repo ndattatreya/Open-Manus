@@ -195,7 +195,7 @@ export function SandboxPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex">
+      <div className="flex-1 flex overflow-hidden h-[calc(100vh-8rem)]">
         {/* Steps Panel */}
         <div className="w-1/2 flex flex-col">
           <div className="p-4 bg-muted/20 flex items-center justify-between">
@@ -211,7 +211,7 @@ export function SandboxPage() {
             )}
           </div>
 
-          <div className="flex-1 p-6 bg-card/80 rounded-xl overflow-y-auto space-y-3">
+          <div className="flex-1 p-6 bg-card/80 rounded-xl overflow-y-auto space-y-3 h-full">
             {steps.map((s) => (
               <div key={s.id} className="flex items-start space-x-2">
                 <s.icon className="w-4 h-4 text-blue-600" />
@@ -241,7 +241,7 @@ export function SandboxPage() {
         </div>
 
         {/* Output Panel */}
-        <div className="w-1/2 flex flex-col">
+        <div className="w-1/2 flex flex-col overflow-hidden">
           <div className="p-4 bg-muted/20 flex justify-between items-center">
             <h3 className="font-medium flex items-center">
               <Code className="w-4 h-4 mr-2 text-[#7B61FF]" /> Output
@@ -265,33 +265,74 @@ export function SandboxPage() {
             )}
           </div>
 
-          <div className="flex-1 bg-card/80 rounded-xl overflow-auto">
+          <div
+            className="flex-1 bg-card/80 rounded-xl overflow-auto p-4"
+            style={{
+              maxHeight: "70vh", // keeps it from taking full screen height
+              overflowY: "auto",
+              overflowX: "hidden",
+              wordWrap: "break-word",
+              whiteSpace: "pre-wrap",
+            }}
+          >
             {isGenerating ? (
-              <p className="text-sm text-muted-foreground italic">Generating... please wait.</p>
-            ) : finalOutput.includes('slidesgpt.com') ? (
-              <div className="p-4 text-sm">
-                <p>🎉 Presentation Ready!</p>
-                <a href={finalOutput.match(/https?:\/\/[^\s)]+/g)?.[0]} target="_blank" rel="noopener noreferrer" className="text-[#7B61FF] underline">
-                  Open in SlidesGPT
-                </a>
-              </div>
+              <p className="text-sm text-muted-foreground italic">
+                Generating... please wait for steps to finish.
+              </p>
             ) : finalOutput ? (
-              <SyntaxHighlighter
-                language="cpp"
-                style={isDarkMode() ? darkStyle : lightStyle}
-                customStyle={{
-                  borderRadius: "10px",
-                  padding: "16px",
-                  fontSize: "0.85rem",
-                  background: isDarkMode() ? "#1e1e1e" : "#f5f5f5"
-                }}
-              >
-                {finalOutput}
-              </SyntaxHighlighter>
+              <>
+                <div
+                  style={{
+                    maxHeight: "60vh",
+                    overflowY: "auto",
+                    overflowX: "hidden",
+                  }}
+                >
+                  <SyntaxHighlighter
+                    language="html"
+                    style={isDarkMode() ? darkStyle : lightStyle}
+                    customStyle={{
+                      borderRadius: "10px",
+                      padding: "16px",
+                      fontSize: "0.85rem",
+                      background: isDarkMode() ? "#1e1e1e" : "#f5f5f5",
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {finalOutput}
+                  </SyntaxHighlighter>
+                </div>
+
+                {/* Optional: Live preview for HTML */}
+                {(finalOutput.toLowerCase().includes("<html") ||
+                  finalOutput.toLowerCase().includes("<body") ||
+                  finalOutput.toLowerCase().includes("<div")) && (
+                    <div className="mt-4 border-t border-border/30 pt-3">
+                      <h4 className="text-sm font-medium mb-2 text-foreground/80">
+                        🔍 Live Preview:
+                      </h4>
+                      <iframe
+                        title="Live Preview"
+                        srcDoc={finalOutput}
+                        sandbox="allow-scripts allow-same-origin"
+                        style={{
+                          width: "100%",
+                          height: "400px",
+                          borderRadius: "10px",
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          background: "#fff",
+                          overflow: "hidden",
+                        }}
+                      />
+                    </div>
+                  )}
+              </>
             ) : (
               <p className="text-sm text-muted-foreground">Output will appear here...</p>
             )}
           </div>
+
         </div>
       </div>
     </div>
