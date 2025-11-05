@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Backend server for Nava AI using Express, Passport, MongoDB, and i18n.",
   "main": "index.js",
-  "type": "module",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js"

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
@@ -8,12 +8,24 @@ import { MobileAppPreview } from './MobileAppPreview';
 import { ShiningStars } from './ShiningStars';
 import { LanguageSwitcher } from './LanguageSwitcher';
 
+const [email, setEmail] = useState('');
+const [username, setUsername] = useState('');
+
 interface NavbarProps {
   onToggleSidebar: () => void;
   onToggleAppPreview: () => void;
   showAppPreview: boolean;
   onLogout: () => void;
 }
+
+useEffect(() => {
+  // Load email and username from localStorage on mount
+  const storedEmail = localStorage.getItem('email') || '';
+  const storedUsername = localStorage.getItem('username') || '';
+
+  setEmail(storedEmail);
+  setUsername(storedUsername || (storedEmail ? storedEmail.split('@')[0] : ''));
+}, []);
 
 export function Navbar({ onToggleSidebar, onToggleAppPreview, showAppPreview, onLogout }: NavbarProps) {
   const { theme, toggleTheme } = useTheme();
@@ -83,14 +95,14 @@ export function Navbar({ onToggleSidebar, onToggleAppPreview, showAppPreview, on
                 </AvatarFallback>
               </Avatar>
               <div className="hidden sm:block">
-                <div className="text-sm font-medium">Yeswanth Kosuri</div>
+                <div className="text-sm font-medium"><span className="font-semibold">{username || 'User'}</span></div>
               </div>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 bg-card/95 backdrop-blur-xl">
             <div className="px-3 py-2">
-              <p className="text-sm font-medium">Yeswanth Kosuri</p>
-              <p className="text-xs text-muted-foreground">yeswanth@example.com</p>
+              <p className="text-sm font-medium"><span className="font-semibold">{username || 'User'}</span></p>
+              <p className="text-xs text-muted-foreground"><span className="font-semibold">{email || 'User'}</span></p>
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="cursor-pointer hover:bg-muted/50">

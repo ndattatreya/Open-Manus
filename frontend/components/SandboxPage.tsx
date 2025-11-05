@@ -21,13 +21,61 @@ export function SandboxPage() {
     }
   }, []);
 
-
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
+
     setIsGenerating(true);
     setSteps([]);
     setFinalOutput('');
 
+    // ✅ Check if user requested PPT generation
+    const lowerPrompt = prompt.toLowerCase();
+    const isPPTRequest =
+      lowerPrompt.includes('ppt') ||
+      lowerPrompt.includes('presentation') ||
+      lowerPrompt.includes('slides');
+
+    if (isPPTRequest) {
+      setSteps([
+        { id: 1, title: 'Initializing SlidesGPT', description: ['Connecting to SlidesGPT API...'], icon: Loader2 },
+      ]);
+
+      try {
+        const response = await fetch('http://localhost:5000/api/presentation/generate-ppt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          setSteps(prev => [
+            ...prev,
+            { id: 2, title: 'Presentation Generated', description: ['SlidesGPT finished generating your slides!'], icon: CheckCircle },
+          ]);
+          setFinalOutput(`✅ Presentation ready!\n\n🔗 [View Online](${data.embedUrl})\n📥 [Download PPTX](${data.downloadUrl})`);
+        } else {
+          setSteps(prev => [
+            ...prev,
+            { id: 2, title: 'Error', description: [data.error || 'SlidesGPT failed to generate presentation.'], icon: Square },
+          ]);
+          setFinalOutput('❌ Failed to generate PPT.');
+        }
+      } catch (err) {
+        setSteps(prev => [
+          ...prev,
+          { id: 2, title: 'Error', description: ['Could not connect to backend.'], icon: Square },
+        ]);
+        setFinalOutput('⚠️ Network error while generating PPT.');
+      } finally {
+        setIsGenerating(false);
+      }
+
+      return; // stop here — no normal AI stream
+    }
+
+    // 🧠 Else: use your normal LLM stream generation
     const eventSource = new EventSource(`http://localhost:8000/stream?prompt=${encodeURIComponent(prompt)}`);
     let outputBuffer = '';
     let hasOutputStarted = false;
@@ -170,7 +218,14 @@ export function SandboxPage() {
 
           <div className="flex-1 bg-card/80 rounded-xl overflow-auto">
             {isGenerating ? (
-              <p className="text-sm text-muted-foreground italic">Generating... please wait for steps to finish.</p>
+              <p className="text-sm text-muted-foreground italic">Generating... please wait.</p>
+            ) : finalOutput.includes('slidesgpt.com') ? (
+              <div className="p-4 text-sm">
+                <p>🎉 Presentation Ready!</p>
+                <a href={finalOutput.match(/https?:\/\/[^\s)]+/g)?.[0]} target="_blank" rel="noopener noreferrer" className="text-[#7B61FF] underline">
+                  Open in SlidesGPT
+                </a>
+              </div>
             ) : finalOutput ? (
               <SyntaxHighlighter
                 language="cpp"

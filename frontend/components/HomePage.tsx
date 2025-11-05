@@ -26,10 +26,12 @@ interface HomePageProps {
 
 export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps) {
   const [email, setEmail] = useState('');
+  const [isDraft, setIsDraft] = useState(true);
+  const [isPrivate, setIsPrivate] = useState(true);
   const [username, setUsername] = useState('');
   const [prompt, setPrompt] = useState('');
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('Nava ai');
+  const [selectedModel, setSelectedModel] = useState('Nava AI');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState(() => Date.now().toString());
   const [showOptions, setShowOptions] = useState(true);
@@ -47,6 +49,19 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
     setEmail(storedEmail);
     setUsername(storedUsername || (storedEmail ? storedEmail.split('@')[0] : ''));
   }, []);
+
+  useEffect(() => {
+    const savedDraft = localStorage.getItem('isDraft');
+    const savedPrivate = localStorage.getItem('isPrivate');
+    if (savedDraft !== null) setIsDraft(savedDraft === 'true');
+    if (savedPrivate !== null) setIsPrivate(savedPrivate === 'true');
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('isDraft', String(isDraft));
+    localStorage.setItem('isPrivate', String(isPrivate));
+  }, [isDraft, isPrivate]);
+
 
   const aiModels = [
     "GPT-4",
@@ -295,12 +310,31 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
               <p className="text-base sm:text-xl text-muted-foreground mb-6 sm:mb-8">
                 What can I create for you today?
               </p>
+
               <div className="flex items-center justify-center space-x-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-orange-400/10 rounded-lg sm:rounded-xl inline-flex text-xs sm:text-sm">
                 <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-orange-400 rounded-full animate-pulse"></div>
-                <span className="text-orange-600 dark:text-orange-400">Draft</span>
+
+                {/* Status toggle */}
+                <span
+                  onClick={() => setIsDraft(prev => !prev)}
+                  className="text-orange-600 dark:text-orange-400 cursor-pointer hover:underline"
+                >
+                  {isDraft ? 'Draft' : 'Published'}
+                </span>
+
                 <span className="text-muted-foreground">•</span>
-                <span className="text-muted-foreground">Private</span>
+
+                {/* Visibility toggle */}
+                <span
+                  onClick={() => setIsPrivate(prev => !prev)}
+                  className={`cursor-pointer hover:underline ${isPrivate ? 'text-muted-foreground' : 'text-green-400'
+                    }`}
+                >
+                  {isPrivate ? 'Private' : 'Public'}
+                </span>
               </div>
+
+
             </div>
           </div>
         ) : (

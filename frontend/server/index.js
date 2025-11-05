@@ -11,6 +11,7 @@ import sessionsRoutes from "./routes/sessions.js";
 import sandboxRoutes from "./routes/sandboxRoutes.js";
 import authRoutes from "./routes/auth.js";
 import googleAuthRoutes from "./routes/googleAuth.js"; // <-- New Google OAuth routes
+import presentationRouter from "./routes/presentation.js";
 
 
 const app = express();
@@ -35,6 +36,9 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// presentation.js route
+app.use("/api/presentation", presentationRouter);
 
 // Express session (required for Passport)
 app.use(
