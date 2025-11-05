@@ -226,8 +226,8 @@ class BrowserUseTool(BaseTool, Generic[Context]):
 
                 # Get max content length from config
                 max_content_length = getattr(
-                    config.browser_config, "max_content_length", 2000
-                )
+                    config.browser_config, "max_content_length", 10000
+                    )
 
                 # Navigation actions
                 if action == "go_to_url":
@@ -381,7 +381,59 @@ class BrowserUseTool(BaseTool, Generic[Context]):
                     page = await context.get_current_page()
                     import markdownify
 
-                    content = markdownify.markdownify(await page.content())
+                    try:
+                        # First try to get just the main content
+                        main_content = await page.evaluate("""
+                            () => {
+                                const selectors = [
+                                    'main',
+                                    'article',
+                                    '[role="main"]',
+                                    '#content',
+                                    '.content',
+                                    '.main',
+                                    '.article'
+                                ];
+
+                                for (const selector of selectors) {
+                                    const element = document.querySelector(selector);
+                                    if (element) {
+                                        // Remove script and style tags
+                                        const clone = element.cloneNode(true);
+                                        const scripts = clone.getElementsByTagName('script');
+                                        const styles = clone.getElementsByTagName('style');
+                                        while (scripts.length > 0) scripts[0].remove();
+                                        while (styles.length > 0) styles[0].remove();
+                                        return clone.innerHTML;
+                                    }
+                                }
+
+                                // Fallback to body if no main content found
+                                const body = document.body.cloneNode(true);
+                                const scripts = body.getElementsByTagName('script');
+                                const styles = body.getElementsByTagName('style');
+                                while (scripts.length > 0) scripts[0].remove();
+                                while (styles.length > 0) styles[0].remove();
+                                return body.innerHTML;
+                            }
+                        """)
+
+                        # Convert HTML to markdown with proper settings
+                        content = markdownify.markdownify(
+                            main_content,
+                            heading_style="ATX",
+                            strip=['script', 'style'],
+                            convert=['b', 'i', 'h1', 'h2', 'h3', 'p', 'ul', 'ol', 'li', 'a']
+                        )
+
+                        # Clean up the content
+                        import re
+                        content = re.sub(r'\n{3,}', '\n\n', content)  # Remove excessive newlines
+                        content = re.sub(r'[ \t]+\n', '\n', content)  # Remove trailing spaces
+                        content = content.strip()
+
+                    except Exception as e:
+                        return ToolResult(error=f"Failed to extract content: {str(e)}")
 
                     prompt = f"""\
 Your task is to extract the content of the page. You will be given a page and a goal, and you should extract all relevant information around this goal from the page. If the goal is vague, summarize the page. Respond in json format.
