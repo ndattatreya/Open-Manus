@@ -8,9 +8,6 @@ import { MobileAppPreview } from './MobileAppPreview';
 import { ShiningStars } from './ShiningStars';
 import { LanguageSwitcher } from './LanguageSwitcher';
 
-const [email, setEmail] = useState('');
-const [username, setUsername] = useState('');
-
 interface NavbarProps {
   onToggleSidebar: () => void;
   onToggleAppPreview: () => void;
@@ -18,18 +15,20 @@ interface NavbarProps {
   onLogout: () => void;
 }
 
-useEffect(() => {
-  // Load email and username from localStorage on mount
-  const storedEmail = localStorage.getItem('email') || '';
-  const storedUsername = localStorage.getItem('username') || '';
-
-  setEmail(storedEmail);
-  setUsername(storedUsername || (storedEmail ? storedEmail.split('@')[0] : ''));
-}, []);
-
 export function Navbar({ onToggleSidebar, onToggleAppPreview, showAppPreview, onLogout }: NavbarProps) {
   const { theme, toggleTheme } = useTheme();
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+
+  useEffect(() => {
+    // Load email and username from localStorage on mount
+    const storedEmail = localStorage.getItem('email') || '';
+    const storedUsername = localStorage.getItem('username') || '';
+
+    setEmail(storedEmail);
+    setUsername(storedUsername || (storedEmail ? storedEmail.split('@')[0] : ''));
+  }, []);
 
   return (
     <div className="h-16 bg-background border-b border-border flex items-center justify-between px-6">

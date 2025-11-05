@@ -86,33 +86,77 @@ export function SandboxPage() {
       eventSource.close();
     });
 
+    // ✅ Fixed: no JSON.parse, just handle raw text
     eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      const message = data.message?.trim() || '';
+      const message = (event.data || '').trim();
 
+      if (!message) return;
+
+      // 🧠 Prompt received
       if (message.startsWith('🧠')) {
-        setSteps(prev => [...prev, { id: prev.length + 1, title: 'Received Prompt', description: [message], icon: Terminal }]);
+        setSteps(prev => [
+          ...prev,
+          { id: prev.length + 1, title: 'Received Prompt', description: [message], icon: Terminal },
+        ]);
+
+        // ⚙️ Processing step
       } else if (message.startsWith('⚙️')) {
-        setSteps(prev => [...prev, { id: prev.length + 1, title: 'Processing', description: [message], icon: Settings }]);
+        setSteps(prev => [
+          ...prev,
+          { id: prev.length + 1, title: 'Processing', description: [message], icon: Settings },
+        ]);
+
+        // 🧩 Reasoning step
       } else if (message.startsWith('🧩')) {
-        setSteps(prev => [...prev, { id: prev.length + 1, title: 'Reasoning', description: [], icon: Code }]);
+        setSteps(prev => [
+          ...prev,
+          { id: prev.length + 1, title: 'Reasoning', description: [message], icon: Code },
+        ]);
+
+        // 💡 Output section begins
       } else if (message.startsWith('💡 OUTPUT_START')) {
         hasOutputStarted = true;
         outputBuffer = '';
-        setSteps(prev => [...prev, { id: prev.length + 1, title: 'Generating Output', description: ['Streaming output...'], icon: Code }]);
+        setSteps(prev => [
+          ...prev,
+          { id: prev.length + 1, title: 'Generating Output', description: ['Streaming output...'], icon: Code },
+        ]);
+
+        // 💡 Output section ends
       } else if (message.startsWith('💡 OUTPUT_END')) {
         setFinalOutput(outputBuffer.trim());
-        setSteps(prev => prev.map(s => s.title === 'Generating Output' ? { ...s, title: 'Output Complete', icon: CheckCircle } : s));
+        setSteps(prev =>
+          prev.map(s =>
+            s.title === 'Generating Output'
+              ? { ...s, title: 'Output Complete', icon: CheckCircle }
+              : s
+          )
+        );
+
+        // 💡 Streaming output lines
       } else if (message.startsWith('💡')) {
         const cleaned = message.replace(/^💡\s?/, '');
         outputBuffer += cleaned + '\n';
+
+        // ✅ Show code progressively like a live typing effect
+        setFinalOutput(prev => prev + cleaned + '\n');
+
+        // ✅ Completed
       } else if (message.startsWith('✅')) {
-        setSteps(prev => [...prev, { id: prev.length + 1, title: 'Completed', description: [message], icon: CheckCircle }]);
+        setSteps(prev => [
+          ...prev,
+          { id: prev.length + 1, title: 'Completed', description: [message], icon: CheckCircle },
+        ]);
         finished = true;
         eventSource.close();
         setIsGenerating(false);
+
+        // ❌ Error
       } else if (message.startsWith('❌')) {
-        setSteps(prev => [...prev, { id: prev.length + 1, title: 'Error', description: [message], icon: Square }]);
+        setSteps(prev => [
+          ...prev,
+          { id: prev.length + 1, title: 'Error', description: [message], icon: Square },
+        ]);
         setFinalOutput(`Error: ${message}`);
         finished = true;
         eventSource.close();
@@ -120,15 +164,20 @@ export function SandboxPage() {
       }
     };
 
+    // ⚠️ Handle disconnection
     eventSource.onerror = (e) => {
       if (!finished) {
         console.warn('⚠️ Stream connection lost:', e);
-        setSteps(prev => [...prev, { id: prev.length + 1, title: 'Connection Lost', description: ['Stream was interrupted.'], icon: Square }]);
+        setSteps(prev => [
+          ...prev,
+          { id: prev.length + 1, title: 'Connection Lost', description: ['Stream was interrupted.'], icon: Square },
+        ]);
       }
       eventSource.close();
       setIsGenerating(false);
     };
   };
+
 
   const isDarkMode = () =>
     typeof window !== "undefined" && document.documentElement.classList.contains("dark");
