@@ -200,7 +200,7 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
     }
 
     if (input.includes('thank you') || input.includes('thanks')) {
-      return "You're welcome, Yeswanth! Happy to help. Is there anything else you'd like to create?";
+      return "You're welcome, ! Happy to help. Is there anything else you'd like to create?";
     }
 
     // Time and date

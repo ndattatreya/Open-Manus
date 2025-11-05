@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Clock, Code, Loader2, CheckCircle, Square, Terminal, Settings, Share, Download, Play, Search, Copy } from 'lucide-react';
@@ -11,6 +11,16 @@ export function SandboxPage() {
   const [steps, setSteps] = useState<any[]>([]);
   const [finalOutput, setFinalOutput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    // ✅ Prefill prompt from HomePage if user came via "code" or "ppt" request
+    const savedPrompt = localStorage.getItem('sandboxPrompt');
+    if (savedPrompt) {
+      setPrompt(savedPrompt);
+      localStorage.removeItem('sandboxPrompt'); // optional cleanup
+    }
+  }, []);
+
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -116,19 +126,19 @@ export function SandboxPage() {
             ))}
 
             <div className="p-4 border-t border-border/30">
-            <div className="flex items-center space-x-3 bg-muted/30 rounded-lg p-3">
-              <Search className="w-4 h-4 text-muted-foreground" />
-              <Input
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Enter your prompt..."
-                className="flex-1 bg-transparent border-none focus:ring-0"
-              />
-              <Button onClick={handleGenerate} className="bg-gradient-to-r from-[#7B61FF] to-[#9F7AEA] text-white">
-                <Play className="w-3 h-3 mr-1" /> Generate
-              </Button>
+              <div className="flex items-center space-x-3 bg-muted/30 rounded-lg p-3">
+                <Search className="w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Enter your prompt..."
+                  className="flex-1 bg-transparent border-none focus:ring-0"
+                />
+                <Button onClick={handleGenerate} className="bg-gradient-to-r from-[#7B61FF] to-[#9F7AEA] text-white">
+                  <Play className="w-3 h-3 mr-1" /> Generate
+                </Button>
+              </div>
             </div>
-          </div>
           </div>
 
         </div>
@@ -140,20 +150,20 @@ export function SandboxPage() {
               <Code className="w-4 h-4 mr-2 text-[#7B61FF]" /> Output
             </h3>
             {finalOutput && (
-              <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => {
-                navigator.clipboard.writeText(finalOutput);
-                const btn = document.activeElement as HTMLButtonElement;
-                const originalText = btn.innerText;
-                btn.innerText = 'Copied!';
-                setTimeout(() => {
-                btn.innerText = originalText;
-                }, 2000);
-              }}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(finalOutput);
+                  const btn = document.activeElement as HTMLButtonElement;
+                  const originalText = btn.innerText;
+                  btn.innerText = 'Copied!';
+                  setTimeout(() => {
+                    btn.innerText = originalText;
+                  }, 2000);
+                }}
               >
-              <Copy className="w-4 h-4 mr-2" /> Copy
+                <Copy className="w-4 h-4 mr-2" /> Copy
               </Button>
             )}
           </div>
