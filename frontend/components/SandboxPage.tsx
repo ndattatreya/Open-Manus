@@ -1,10 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Clock, Code, Loader2, Play, Search, Globe } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus as darkStyle } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { vs as lightStyle } from "react-syntax-highlighter/dist/esm/styles/prism";
+import {
+  Clock,
+  Code,
+  Loader2,
+  CheckCircle,
+  Square,
+  Terminal,
+  Settings,
+  Share,
+  Download,
+  Play,
+  Search,
+  Copy,
+  Globe
+} from 'lucide-react';
+
 
 interface SandboxPageProps {
   autoRun?: boolean;
@@ -18,12 +33,65 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
   const [codeOutput, setCodeOutput] = useState('');
   const [livePreview, setLivePreview] = useState('');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [slides, setSlides] = useState([]);
+
 
   // Load prompt if saved
   useEffect(() => {
     const saved = localStorage.getItem('navaSandboxPrompt');
     if (saved) setPrompt(saved);
   }, []);
+
+  const handleDownloadText = async (content: string, filename: string, type?: string) => {
+    if (!content) return;
+
+    if (type === 'pdf') {
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF();
+      doc.text(content, 10, 10);
+      doc.save(filename);
+      return;
+    }
+
+    if (type === 'docx') {
+      const { Document, Packer, Paragraph } = await import('docx');
+      const doc = new Document({
+        sections: [{ properties: {}, children: [new Paragraph(content)] }],
+      });
+      const blob = await Packer.toBlob(doc);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      return;
+    }
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+  };
+
+  const handleDownload = (imageUrl: string, filename: string) => {
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    link.download = filename;
+    link.click();
+  };
+
+  const handleDownloadPPT = async (slidesData: any) => {
+    const PptxGenJS = (await import('pptxgenjs')).default;
+    const pptx = new PptxGenJS();
+
+    slidesData?.forEach((slide: any, i: number) => {
+      const s = pptx.addSlide();
+      s.addText(`Slide ${i + 1}`, { x: 1, y: 0.5, fontSize: 24, bold: true });
+      s.addText(slide.text || slide, { x: 1, y: 1, fontSize: 18 });
+    });
+
+    pptx.writeFile({ fileName: 'slides_output.pptx' });
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -212,23 +280,69 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
           </div>
         </div>
 
+
         {/* Output Panel */}
         <div className="w-1/2 flex flex-col overflow-hidden">
           <div className="p-4 bg-muted/20 flex justify-between items-center">
             <h3 className="font-medium flex items-center">
               <Code className="w-4 h-4 mr-2 text-[#7B61FF]" /> Output
             </h3>
-            {livePreview && (
+
+            {/* ✅ Dynamic Action Buttons */}
+            {livePreview ? (
               <Button
                 onClick={() => openWebsiteInNewTab(livePreview)}
                 variant="outline"
-                className="text-white bg-gradient-to-r from-[#7B61FF] to-[#9F7AEA] hover:opacity-90"
+                className="text-white bg-gradient-to-r from-[#7B61FF] to-[#9F7AEA]"
               >
                 <Globe className="w-4 h-4 mr-2" /> Run Website
               </Button>
-            )}
+            ) : imageUrl ? (
+              <Button
+                onClick={() => handleDownload(imageUrl, 'generated_image.png')}
+                variant="outline"
+                className="text-white bg-gradient-to-r from-[#7B61FF] to-[#9F7AEA]"
+              >
+                <Download className="w-4 h-4 mr-2" /> Download Image
+              </Button>
+            ) : finalOutput ? (
+              <div className="flex space-x-2">
+                <Button
+                  onClick={() => handleDownloadText(finalOutput, 'output_text.pdf', 'pdf')}
+                  variant="outline"
+                  className="text-white bg-gradient-to-r from-[#7B61FF] to-[#9F7AEA]"
+                >
+                  <Download className="w-4 h-4 mr-2" /> Download PDF
+                </Button>
+                <Button
+                  onClick={() => handleDownloadText(finalOutput, 'output_text.docx', 'docx')}
+                  variant="outline"
+                  className="text-white bg-gradient-to-r from-[#7B61FF] to-[#9F7AEA]"
+                >
+                  <Download className="w-4 h-4 mr-2" /> Download Word
+                </Button>
+              </div>
+            ) : codeOutput ? (
+              <Button
+                onClick={() => handleDownloadText(codeOutput, 'generated_code.txt')}
+                variant="outline"
+                className="text-white bg-gradient-to-r from-[#7B61FF] to-[#9F7AEA]"
+              >
+                <Download className="w-4 h-4 mr-2" /> Download Code
+              </Button>
+            ) : slides?.length > 0 ? (
+              <Button
+                onClick={() => handleDownloadPPT(slides)}
+                variant="outline"
+                className="text-white bg-gradient-to-r from-[#7B61FF] to-[#9F7AEA]"
+              >
+                <Download className="w-4 h-4 mr-2" /> Download PPT
+              </Button>
+            ) : null}
+
           </div>
 
+          {/* ✅ Output Display Area */}
           <div className="flex-1 bg-card/80 rounded-xl overflow-auto p-4 space-y-6">
             {isGenerating ? (
               <p className="text-sm text-muted-foreground italic">
@@ -251,19 +365,11 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
                 </Button>
               </div>
             ) : codeOutput ? (
-              <SyntaxHighlighter
-                language="html"
-                style={isDarkMode() ? darkStyle : lightStyle}
-                customStyle={{
-                  borderRadius: '10px',
-                  padding: '16px',
-                  fontSize: '0.9rem',
-                }}
-              >
+              <pre className="bg-black text-white p-3 rounded-md text-sm overflow-x-auto">
                 {codeOutput}
-              </SyntaxHighlighter>
+              </pre>
             ) : finalOutput ? (
-              <div>{finalOutput}</div>
+              <div className="text-sm whitespace-pre-wrap">{finalOutput}</div>
             ) : (
               <p className="text-sm text-muted-foreground">
                 Output will appear here...
@@ -272,6 +378,7 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
           </div>
         </div>
       </div>
+
     </div>
   );
 };

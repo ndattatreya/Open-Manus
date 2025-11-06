@@ -6,8 +6,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import replicate
 import requests
+import json
 
 from app.agent.manus import Manus
 from app.logger import logger
@@ -70,153 +70,189 @@ class PromptRequest(BaseModel):
 
 
 # ======================================================
-# 🔹 Main Prompt Router (Detect Intent)
+# 🔹 Helper for OpenRouter Calls
 # ======================================================
-import re, json, os
-from datetime import datetime
 
-HISTORY_FILE = "app/data/code_history.json"
+def call_openrouter(prompt: str, system_instruction: str = None):
+    """Calls OpenRouter Llama 3.3 70B (free or fallback) for smart text/code generation."""
+    openrouter_key = os.getenv("OPENROUTER_API_KEY")
+    if not openrouter_key:
+        raise HTTPException(status_code=500, detail="Missing OPENROUTER_API_KEY")
 
+    # Prepare message sequence
+    messages = []
+    if system_instruction:
+        messages.append({"role": "system", "content": system_instruction})
+    messages.append({"role": "user", "content": prompt})
 
-def load_history():
-    if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+    headers = {
+        "Authorization": f"Bearer {openrouter_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://navaai.vercel.app",
+        "X-Title": "NavaAI",
+    }
 
+    # Primary model
+    models_to_try = [
+        "meta-llama/llama-3.3-70b-instruct:free",  # ✅ new reliable free model
+        "mistralai/mixtral-8x7b",                  # fallback model
+    ]
 
-def save_history(history):
-    os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history, f, indent=2, ensure_ascii=False)
+    for model in models_to_try:
+        payload = {"model": model, "messages": messages}
+        print(f"🧠 Trying OpenRouter model: {model}")
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            data=json.dumps(payload),
+        )
 
-#================================================================
+        if response.status_code == 200:
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
 
-class PromptRequest(BaseModel):
-    prompt: str
+        print(f"⚠️ Model {model} failed ({response.status_code}): {response.text}")
+
+    raise HTTPException(status_code=500, detail="All OpenRouter models failed.")
+
+# ======================================================
+# 🔹 Main Unified Prompt Router
+# ======================================================
 
 @app.post("/api/run")
 async def run_prompt(request: PromptRequest):
     """
-    Unified intelligent route — handles code, PPT, image, website, and text.
-    Uses Replicate for images directly (no OpenAI billing needed).
+    Unified intelligent route — automatically detects intent.
+    Uses ClipDrop for images, SlidesGPT for presentations,
+    and OpenRouter for everything else.
     """
     prompt = request.prompt.strip()
-    lower_prompt = prompt.lower()
-
     print("🧠 Received prompt:", prompt)
 
-    # ======================================================
-    # 🎨 1️⃣ IMAGE GENERATION (Direct Replicate API)
-    # ======================================================
-    if any(x in lower_prompt for x in ["image", "photo", "picture", "illustrate", "draw"]):
-        print("🎨 Generating image via Replicate API...")
+    openrouter_key = os.getenv("OPENROUTER_API_KEY")
+    clipdrop_key = os.getenv("CLIPDROP_API_KEY")
+    slidesgpt_key = os.getenv("SLIDESGPT_API_KEY")  # <-- add this
 
+    if not openrouter_key:
+        raise HTTPException(status_code=500, detail="Missing OPENROUTER_API_KEY")
+
+    # ======================================================
+    # 🧠 1️⃣ Detect Intent (semantic classification)
+    # ======================================================
+    intent_prompt = f"""
+    Classify the following request into exactly one category:
+    - image
+    - code
+    - website
+    - presentation
+    - text
+
+    User prompt: "{prompt}"
+    """
+
+    headers = {
+        "Authorization": f"Bearer {openrouter_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://navaai.vercel.app",
+        "X-Title": "NavaAI",
+    }
+
+    response = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers=headers,
+        data=json.dumps({
+            "model": "meta-llama/llama-3.1-8b-instruct:free",
+            "messages": [{"role": "user", "content": intent_prompt}]
+        }),
+    )
+
+    if not response.ok:
+        print("⚠️ Intent detection failed:", response.text)
+        intent = "text"
+    else:
+        intent = response.json()["choices"][0]["message"]["content"].strip().lower()
+        print(f"🎯 Detected intent: {intent}")
+
+    # ======================================================
+    # 🎨 2️⃣ IMAGE via ClipDrop
+    # ======================================================
+    if "image" in intent:
+        print("🎨 Generating image via ClipDrop...")
         try:
-            replicate_api_key = os.getenv("REPLICATE_API_TOKEN")
+            if not clipdrop_key:
+                return {"type": "image", "image_url": "https://placehold.co/1024x1024?text=Missing+ClipDrop+Key"}
 
-            if not replicate_api_key:
-                print("⚠️ Missing REPLICATE_API_TOKEN environment variable.")
-                placeholder_url = "https://placehold.co/1024x1024?text=Missing+API+Key"
-                return {"type": "image", "image_url": placeholder_url}
+            img_res = requests.post(
+                "https://clipdrop-api.co/text-to-image/v1",
+                files={"prompt": (None, prompt, "text/plain")},
+                headers={"x-api-key": clipdrop_key},
+                timeout=60,
+            )
+            if img_res.ok:
+                img_b64 = base64.b64encode(img_res.content).decode("utf-8")
+                return {"type": "image", "image_url": f"data:image/png;base64,{img_b64}"}
+            return {"type": "image", "image_url": "https://placehold.co/1024x1024?text=ClipDrop+Error"}
+        except Exception as e:
+            print("🔥 ClipDrop error:", str(e))
+            return {"type": "image", "image_url": "https://placehold.co/1024x1024?text=Error"}
 
-            client = replicate.Client(api_token=os.getenv("REPLICATE_API_TOKEN"))
-            output = client.run(
-                "stability-ai/sdxl",
-                input={"prompt": "a golden retriever in a spacesuit", "width": 512, "height": 512}
+    # ======================================================
+    # 🖼️ 3️⃣ PRESENTATION via SlidesGPT
+    # ======================================================
+    if "presentation" in intent or "ppt" in intent:
+        print("🖼️ Generating presentation via SlidesGPT...")
+        try:
+            if not slidesgpt_key:
+                return {"type": "ppt", "slides": ["Missing SLIDESGPT_API_KEY"]}
+
+            slides_res = requests.post(
+                "https://api.slidesgpt.com/v1/presentations",
+                headers={
+                    "Authorization": f"Bearer {slidesgpt_key}",
+                    "Content-Type": "application/json",
+                },
+                json={"prompt": prompt},
+                timeout=120,
             )
 
-            image_url = output[0] if isinstance(output, list) else output
-            print("✅ Image generated successfully:", image_url)
-            return {"type": "image", "image_url": image_url}
-
+            if slides_res.ok:
+                slides_data = slides_res.json()
+                print("✅ SlidesGPT response received.")
+                return {"type": "ppt", "slides": slides_data}
+            else:
+                print("⚠️ SlidesGPT API error:", slides_res.text)
+                return {"type": "ppt", "slides": ["SlidesGPT API error"]}
         except Exception as e:
-            print("🔥 Image generation error:", str(e))
-            placeholder_url = "https://placehold.co/1024x1024?text=Image+Generation+Failed"
-            return {"type": "image", "image_url": placeholder_url}
+            print("🔥 SlidesGPT generation error:", str(e))
+            return {"type": "ppt", "slides": ["Error generating presentation"]}
 
     # ======================================================
-    # 💻 2️⃣ CODE GENERATION
+    # 💻 4️⃣ CODE via OpenRouter
     # ======================================================
-    if any(x in lower_prompt for x in ["python", "react", "node", "api", "frontend", "typescript", "script"]):
-        print("💻 Generating code...")
-        from openai import OpenAI
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-        code_output = client.responses.create(
-            model="gpt-4o-mini",
-            input=f"Return only runnable code for this prompt:\n{prompt}",
-        ).output_text.strip()
-
-        code = re.sub(r"```[a-zA-Z0-9]*", "", code_output).replace("```", "").strip()
-        return {"type": "code", "output": code}
+    if "code" in intent:
+        print("💻 Generating code via OpenRouter...")
+        result = call_openrouter(prompt, "Return only runnable code, no markdown or explanations.")
+        return {"type": "code", "output": result}
 
     # ======================================================
-    # 🌐 3️⃣ WEBSITE GENERATION
+    # 🌐 5️⃣ WEBSITE via OpenRouter
     # ======================================================
-    if any(x in lower_prompt for x in ["website", "landing page", "portfolio", "home page", "html"]):
-        print("🌐 Generating website HTML...")
-        from openai import OpenAI
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-        code = client.responses.create(
-            model="gpt-4o-mini",
-            input=f"Generate clean HTML, CSS, and JS for: {prompt}. "
-                  f"Do NOT include markdown or comments."
-        ).output_text.strip()
-
-        if not code.lower().startswith("<!doctype html"):
-            code = "<!DOCTYPE html>\n" + code
-        return {"type": "website", "html": code}
+    if "website" in intent:
+        print("🌐 Generating website via OpenRouter...")
+        html = call_openrouter(prompt, "Generate full HTML, CSS, JS for a complete website.")
+        if not html.lower().startswith("<!doctype html"):
+            html = "<!DOCTYPE html>\n" + html
+        return {"type": "website", "html": html}
 
     # ======================================================
-    # 🧾 4️⃣ TEXT GENERATION (DEFAULT)
+    # 🧾 6️⃣ TEXT (Default)
     # ======================================================
-    print("🧾 Generating text response...")
-    from openai import OpenAI
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-    text_result = client.responses.create(
-        model="gpt-4o-mini",
-        input=prompt,
-    ).output_text.strip()
-
-    return {"type": "text", "output": text_result}
+    print("🧾 Generating text via OpenRouter...")
+    output = call_openrouter(prompt)
+    return {"type": "text", "output": output}
 
 # ======================================================
-# 🔹 Code Generation
-# ======================================================
-@app.post("/api/generate-code")
-async def generate_code(request: PromptRequest):
-    """Generate code (returns as plain text for frontend display)."""
-    try:
-        if not agent:
-            raise HTTPException(status_code=503, detail="Agent not ready yet.")
-        result = await agent.run(request.prompt)
-        return {"type": "code", "language": "auto", "output": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Code generation failed: {str(e)}")
-
-
-# ======================================================
-# 🔹 PPT Generation
-# ======================================================
-@app.post("/api/generate-ppt")
-async def generate_ppt(request: PromptRequest):
-    """Generate PPT content (as structured slides JSON)."""
-    try:
-        if not agent:
-            raise HTTPException(status_code=503, detail="Agent not ready yet.")
-
-        slides_text = await agent.run(f"Generate PowerPoint slide content for: {request.prompt}")
-        slides = slides_text.split("\n\n")  # simple split per slide
-        return {"type": "ppt", "slides": slides}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"PPT generation failed: {str(e)}")
-
-
-# ======================================================
-# 🔹 Image Generation
+# 🔹 Code / PPT / Website Endpoints (Unchanged)
 # ======================================================
 class ImageRequest(BaseModel):
     prompt: str
@@ -224,59 +260,48 @@ class ImageRequest(BaseModel):
 
 @app.post("/api/generate-image")
 async def generate_image(req: ImageRequest):
-    """Generate an image using OpenAI or OpenRouter."""
+    """Legacy image endpoint (uses ClipDrop)"""
     try:
-        openai_key = os.getenv("OPENAI_API_KEY")
-        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        clipdrop_api_key = os.getenv("CLIPDROP_API_KEY")
+        if not clipdrop_api_key:
+            raise HTTPException(status_code=500, detail="Missing CLIPDROP_API_KEY")
 
-        if not openai_key and not openrouter_key:
-            raise HTTPException(status_code=500, detail="No API keys found.")
+        response = requests.post(
+            "https://clipdrop-api.co/text-to-image/v1",
+            files={"prompt": (None, req.prompt, "text/plain")},
+            headers={"x-api-key": clipdrop_api_key},
+            timeout=60,
+        )
 
-        payload = {
-            "model": "dall-e-3",
-            "prompt": req.prompt,
-            "size": req.size,
-        }
-
-        # Try OpenAI first
-        if openai_key:
-            headers = {"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"}
-            response = requests.post("https://api.openai.com/v1/images/generations", headers=headers, json=payload)
-            if response.status_code == 200:
-                image_base64 = response.json()["data"][0]["b64_json"]
-                image_bytes = base64.b64decode(image_base64)
-                return StreamingResponse(io.BytesIO(image_bytes), media_type="image/png")
-
-        # Fallback: OpenRouter
-        if openrouter_key:
-            headers = {
-                "Authorization": f"Bearer {openrouter_key}",
-                "HTTP-Referer": "https://navaai.vercel.app",
-                "X-Title": "NavaAI",
-                "Content-Type": "application/json",
-            }
-            response = requests.post("https://openrouter.ai/api/v1/images/generations", headers=headers, json=payload)
-            if response.status_code == 200:
-                image_base64 = response.json()["data"][0]["b64_json"]
-                image_bytes = base64.b64decode(image_base64)
-                return StreamingResponse(io.BytesIO(image_bytes), media_type="image/png")
-
-        raise HTTPException(status_code=500, detail="All image generation services failed.")
+        if response.ok:
+            image_bytes = response.content
+            base64_image = base64.b64encode(image_bytes).decode("utf-8")
+            image_url = f"data:image/png;base64,{base64_image}"
+            return {"type": "image", "image_url": image_url}
+        else:
+            return {"type": "image", "image_url": "https://placehold.co/1024x1024?text=ClipDrop+Error"}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Image generation failed: {str(e)}")
 
 
-# ======================================================
-# 🔹 Website / Live Preview
-# ======================================================
-@app.post("/api/live-preview")
-async def live_preview(request: PromptRequest):
-    """Generate HTML/CSS/JS website code for live preview."""
+@app.post("/api/generate-ppt")
+async def generate_ppt(request: PromptRequest):
     try:
         if not agent:
             raise HTTPException(status_code=503, detail="Agent not ready yet.")
+        slides_text = await agent.run(f"Generate PowerPoint slide content for: {request.prompt}")
+        slides = slides_text.split("\n\n")
+        return {"type": "ppt", "slides": slides}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PPT generation failed: {str(e)}")
 
+
+@app.post("/api/live-preview")
+async def live_preview(request: PromptRequest):
+    try:
+        if not agent:
+            raise HTTPException(status_code=503, detail="Agent not ready yet.")
         result = await agent.run(f"Generate full HTML/CSS/JS code for: {request.prompt}")
         html_content = result.strip()
         return JSONResponse({"type": "website", "html": html_content})
