@@ -21,7 +21,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "https://navaai.vercel.app",
+        "https://open-manus-blue.vercel.app/",
+        "https://*.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
