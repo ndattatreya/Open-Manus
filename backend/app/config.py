@@ -1,10 +1,14 @@
 import json
+import os
 import threading
 import tomllib
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
+
+from dotenv import load_dotenv
+load_dotenv()
 
 
 def get_project_root() -> Path:
@@ -231,22 +235,56 @@ class Config:
             return tomllib.load(f)
 
     def _load_initial_config(self):
-        raw_config = self._load_config()
+    # Try loading from config.toml first (for local dev)
+        try:
+            raw_config = self._load_config()
+        except FileNotFoundError:
+            raw_config = {}
+            print("⚠️ No config.toml found — falling back to environment variables")
+
         base_llm = raw_config.get("llm", {})
-        llm_overrides = {
+        llm_overrides = {               # 👈 <-- Add this back
             k: v for k, v in raw_config.get("llm", {}).items() if isinstance(v, dict)
         }
 
+        # Hybrid setup — prefer environment variables, fallback to TOML
         default_settings = {
-            "model": base_llm.get("model"),
-            "base_url": base_llm.get("base_url"),
-            "api_key": base_llm.get("api_key"),
-            "max_tokens": base_llm.get("max_tokens", 4096),
+            "model": os.getenv("LLM_MODEL", base_llm.get("model")),
+            "base_url": os.getenv("LLM_BASE_URL", base_llm.get("base_url")),
+            "api_key": os.getenv("LLM_API_KEY", base_llm.get("api_key")),
+            "max_tokens": int(os.getenv("LLM_MAX_TOKENS", base_llm.get("max_tokens", 4096))),
             "max_input_tokens": base_llm.get("max_input_tokens"),
-            "temperature": base_llm.get("temperature", 1.0),
-            "api_type": base_llm.get("api_type", ""),
-            "api_version": base_llm.get("api_version", ""),
+            "temperature": float(os.getenv("LLM_TEMPERATURE", base_llm.get("temperature", 1.0))),
+            "api_type": os.getenv("LLM_API_TYPE", base_llm.get("api_type", "")),
+            "api_version": os.getenv("LLM_API_VERSION", base_llm.get("api_version", "")),
         }
+
+        print(f"✅ Loaded LLM config: model={default_settings['model']} base_url={default_settings['base_url']}")
+
+        # Try loading from config.toml first (for local dev)
+        try:
+            raw_config = self._load_config()
+        except FileNotFoundError:
+            raw_config = {}
+            print("⚠️ No config.toml found — falling back to environment variables")
+
+        base_llm = raw_config.get("llm", {})
+
+        # Hybrid setup — prefer environment variables, fallback to TOML
+        default_settings = {
+            "model": os.getenv("LLM_MODEL", base_llm.get("model")),
+            "base_url": os.getenv("LLM_BASE_URL", base_llm.get("base_url")),
+            "api_key": os.getenv("LLM_API_KEY", base_llm.get("api_key")),
+            "max_tokens": int(os.getenv("LLM_MAX_TOKENS", base_llm.get("max_tokens", 4096))),
+            "max_input_tokens": base_llm.get("max_input_tokens"),
+            "temperature": float(os.getenv("LLM_TEMPERATURE", base_llm.get("temperature", 1.0))),
+            "api_type": os.getenv("LLM_API_TYPE", base_llm.get("api_type", "")),
+            "api_version": os.getenv("LLM_API_VERSION", base_llm.get("api_version", "")),
+        }
+
+        # Log loaded model for debugging
+        print(f"✅ Loaded LLM config: model={default_settings['model']} base_url={default_settings['base_url']}")
+
 
         # handle browser config.
         browser_config = raw_config.get("browser", {})

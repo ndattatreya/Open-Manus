@@ -16,6 +16,7 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
   const [steps, setSteps] = useState<any[]>([]);
   const [finalOutput, setFinalOutput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [imageUrl, setImageUrl] = useState(null);
 
   useEffect(() => {
     // ✅ Prefill prompt from HomePage if user came via "code" or "ppt" request
@@ -26,163 +27,92 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
     }
   }, []);
 
-  const handleGenerate = async () => {
-    if (!prompt.trim()) return;
+  async function generateTextOrCode(prompt) {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
 
-    setIsGenerating(true);
-    setSteps([]);
-    setFinalOutput('');
+    setSteps([{ id: 1, title: 'Processing Prompt', description: ['Sending request to LLM...'], icon: Play }]);
 
-    // ✅ Check if user requested PPT generation
-    const lowerPrompt = prompt.toLowerCase();
-    const isPPTRequest =
-      lowerPrompt.includes('ppt') ||
-      lowerPrompt.includes('presentation') ||
-      lowerPrompt.includes('slides');
-
-    if (isPPTRequest) {
-      setSteps([
-        { id: 1, title: 'Initializing SlidesGPT', description: ['Connecting to SlidesGPT API...'], icon: Loader2 },
-      ]);
-
-      try {
-        const response = await fetch('http://localhost:5000/api/presentation/generate-ppt', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt }),
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-          setSteps(prev => [
-            ...prev,
-            { id: 2, title: 'Presentation Generated', description: ['SlidesGPT finished generating your slides!'], icon: CheckCircle },
-          ]);
-          setFinalOutput(`✅ Presentation ready!\n\n🔗 [View Online](${data.embedUrl})\n📥 [Download PPTX](${data.downloadUrl})`);
-        } else {
-          setSteps(prev => [
-            ...prev,
-            { id: 2, title: 'Error', description: [data.error || 'SlidesGPT failed to generate presentation.'], icon: Square },
-          ]);
-          setFinalOutput('❌ Failed to generate PPT.');
-        }
-      } catch (err) {
-        setSteps(prev => [
-          ...prev,
-          { id: 2, title: 'Error', description: ['Could not connect to backend.'], icon: Square },
-        ]);
-        setFinalOutput('⚠️ Network error while generating PPT.');
-      } finally {
-        setIsGenerating(false);
-      }
-
-      return; // stop here — no normal AI stream
-    }
-
-    // 🧠 Else: use your normal LLM stream generation
-    const eventSource = new EventSource(`http://localhost:8000/stream?prompt=${encodeURIComponent(prompt)}`);
-    let outputBuffer = '';
-    let hasOutputStarted = false;
-    let finished = false;
-
-    eventSource.addEventListener('end', () => {
-      finished = true;
-      eventSource.close();
+    const res = await fetch(`${backendUrl}/api/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
     });
 
-    // ✅ Fixed: no JSON.parse, just handle raw text
-    eventSource.onmessage = (event) => {
-      const message = (event.data || '').trim();
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.detail || "Text generation failed");
+    }
 
-      if (!message) return;
+    const data = await res.json();
+    setFinalOutput(data.output || JSON.stringify(data, null, 2));
 
-      // 🧠 Prompt received
-      if (message.startsWith('🧠')) {
-        setSteps(prev => [
-          ...prev,
-          { id: prev.length + 1, title: 'Received Prompt', description: [message], icon: Terminal },
-        ]);
+    setSteps((prev) => [
+      ...prev,
+      { id: 2, title: '✅ Completed', description: ['Text/code generation finished.'], icon: Play },
+    ]);
+  }
 
-        // ⚙️ Processing step
-      } else if (message.startsWith('⚙️')) {
-        setSteps(prev => [
-          ...prev,
-          { id: prev.length + 1, title: 'Processing', description: [message], icon: Settings },
-        ]);
 
-        // 🧩 Reasoning step
-      } else if (message.startsWith('🧩')) {
-        setSteps(prev => [
-          ...prev,
-          { id: prev.length + 1, title: 'Reasoning', description: [message], icon: Code },
-        ]);
+  const handleGenerate = async () => {
+  if (!prompt.trim()) return;
 
-        // 💡 Output section begins
-      } else if (message.startsWith('💡 OUTPUT_START')) {
-        hasOutputStarted = true;
-        outputBuffer = '';
-        setSteps(prev => [
-          ...prev,
-          { id: prev.length + 1, title: 'Generating Output', description: ['Streaming output...'], icon: Code },
-        ]);
+  setIsGenerating(true);
+  setSteps([]);
+  setFinalOutput('');
+  setImageUrl(null); // clear old image
 
-        // 💡 Output section ends
-      } else if (message.startsWith('💡 OUTPUT_END')) {
-        setFinalOutput(outputBuffer.trim());
-        setSteps(prev =>
-          prev.map(s =>
-            s.title === 'Generating Output'
-              ? { ...s, title: 'Output Complete', icon: CheckCircle }
-              : s
-          )
-        );
+  try {
+    const lowerPrompt = prompt.toLowerCase();
 
-        // 💡 Streaming output lines
-      } else if (message.startsWith('💡')) {
-        const cleaned = message.replace(/^💡\s?/, '');
-        outputBuffer += cleaned + '\n';
+    // ✅ Detect if the user wants an image
+    const isImageRequest =
+      lowerPrompt.includes('image') ||
+      lowerPrompt.includes('photo') ||
+      lowerPrompt.includes('picture') ||
+      lowerPrompt.includes('draw') ||
+      lowerPrompt.includes('illustration');
 
-        // ✅ Show code progressively like a live typing effect
-        setFinalOutput(prev => prev + cleaned + '\n');
+    // ✅ Normalize backend URL (remove trailing slash)
+    const backendUrl = (import.meta.env.VITE_BACKEND_URL || "http://localhost:8000").replace(/\/$/, '');
 
-        // ✅ Completed
-      } else if (message.startsWith('✅')) {
-        setSteps(prev => [
-          ...prev,
-          { id: prev.length + 1, title: 'Completed', description: [message], icon: CheckCircle },
-        ]);
-        finished = true;
-        eventSource.close();
-        setIsGenerating(false);
+    if (isImageRequest) {
+      // 🖼️ Image generation flow
+      setSteps([{ id: 1, title: 'Image Generation', description: ['Generating your image...'], icon: Play }]);
 
-        // ❌ Error
-      } else if (message.startsWith('❌')) {
-        setSteps(prev => [
-          ...prev,
-          { id: prev.length + 1, title: 'Error', description: [message], icon: Square },
-        ]);
-        setFinalOutput(`Error: ${message}`);
-        finished = true;
-        eventSource.close();
-        setIsGenerating(false);
+      const res = await fetch(`${backendUrl}/api/generate-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, size: "1024x1024" }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.detail || `Failed to generate image (HTTP ${res.status})`);
       }
-    };
 
-    // ⚠️ Handle disconnection
-    eventSource.onerror = (e) => {
-      if (!finished) {
-        console.warn('⚠️ Stream connection lost:', e);
-        setSteps(prev => [
-          ...prev,
-          { id: prev.length + 1, title: 'Connection Lost', description: ['Stream was interrupted.'], icon: Square },
-        ]);
-      }
-      eventSource.close();
-      setIsGenerating(false);
-    };
-  };
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      setImageUrl(url);
 
+      setSteps((prev) => [
+        ...prev,
+        { id: 2, title: '✅ Completed', description: ['Image generated successfully.'], icon: Play },
+      ]);
+
+    } else {
+      // 🧠 Normal text/code generation
+      await generateTextOrCode(prompt);
+    }
+  } catch (err) {
+    console.error("⚠️ Generation error:", err);
+    setSteps((prev) => [
+      ...prev,
+      { id: 99, title: 'Error', description: [err.message || 'Unexpected error'], icon: Play },
+    ]);
+  } finally {
+    setIsGenerating(false);
+  }
+};
 
   const isDarkMode = () =>
     typeof window !== "undefined" && document.documentElement.classList.contains("dark");
@@ -285,8 +215,17 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
               <p className="text-sm text-muted-foreground italic">
                 Generating... please wait for steps to finish.
               </p>
+            ) : imageUrl ? (
+              <div className="flex justify-center mt-4">
+                <img
+                  src={imageUrl}
+                  alt="Generated by AI"
+                  className="rounded-xl shadow-md w-full max-w-md"
+                />
+              </div>
             ) : finalOutput ? (
               <>
+                {/* existing SyntaxHighlighter + iframe preview */}
                 <div
                   style={{
                     maxHeight: "60vh",
@@ -309,30 +248,6 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
                     {finalOutput}
                   </SyntaxHighlighter>
                 </div>
-
-                {/* Optional: Live preview for HTML */}
-                {(finalOutput.toLowerCase().includes("<html") ||
-                  finalOutput.toLowerCase().includes("<body") ||
-                  finalOutput.toLowerCase().includes("<div")) && (
-                    <div className="mt-4 border-t border-border/30 pt-3">
-                      <h4 className="text-sm font-medium mb-2 text-foreground/80">
-                        🔍 Live Preview:
-                      </h4>
-                      <iframe
-                        title="Live Preview"
-                        srcDoc={finalOutput}
-                        sandbox="allow-scripts allow-same-origin"
-                        style={{
-                          width: "100%",
-                          height: "400px",
-                          borderRadius: "10px",
-                          border: "1px solid rgba(255,255,255,0.1)",
-                          background: "#fff",
-                          overflow: "hidden",
-                        }}
-                      />
-                    </div>
-                  )}
               </>
             ) : (
               <p className="text-sm text-muted-foreground">Output will appear here...</p>
