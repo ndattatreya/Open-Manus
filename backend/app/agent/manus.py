@@ -122,6 +122,40 @@ class Manus(ToolCallAgent):
         result = await super().think()
         self.next_step_prompt = original_prompt
         return result
+    
+    async def simple_generate(self, prompt: str) -> str:
+        """
+        ⚡ Lightweight single-step generation method.
+        Skips multi-step reasoning and tool calls.
+        Used for quick outputs like code, ppt, website, or short answers.
+        """
+        try:
+            # Prefer the Manus's own LLM if available
+            llm = getattr(self, "llm", None)
+            if llm and hasattr(llm, "ask"):
+                messages = [{"role": "user", "content": prompt}]
+                result = await llm.ask(messages, stream=False)
+                if isinstance(result, str):
+                    return result.strip()
+                if hasattr(result, "content"):
+                    return result.content.strip()
+
+            # Fallback to direct OpenAI client call if no LLM bound
+            from openai import OpenAI
+            import os
+
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.5,
+            )
+            return response.choices[0].message.content.strip()
+
+        except Exception as e:
+            logger.error(f"❌ simple_generate failed: {e}")
+            return f"Error during quick generation: {str(e)}"
+
 
     async def llm_call(self, text: str) -> str:
         """Unified safe LLM call handler."""

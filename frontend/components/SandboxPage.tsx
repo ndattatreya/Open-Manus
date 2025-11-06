@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Clock, Code, Loader2, CheckCircle, Square, Terminal, Settings, Share, Download, Play, Search, Copy } from 'lucide-react';
+import { Clock, Code, Loader2, Play, Search, Globe } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus as darkStyle } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { vs as lightStyle } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -11,123 +11,147 @@ interface SandboxPageProps {
 }
 
 export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => {
-  console.log("Auto-run:", autoRun);
   const [prompt, setPrompt] = useState('');
   const [steps, setSteps] = useState<any[]>([]);
   const [finalOutput, setFinalOutput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [imageUrl, setImageUrl] = useState(null);
+  const [codeOutput, setCodeOutput] = useState('');
+  const [livePreview, setLivePreview] = useState('');
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
 
+  // Load prompt if saved
   useEffect(() => {
-    // ✅ Prefill prompt from HomePage if user came via "code" or "ppt" request
-    const savedPrompt = localStorage.getItem('sandboxPrompt');
-    if (savedPrompt) {
-      setPrompt(savedPrompt);
-      localStorage.removeItem('sandboxPrompt'); // optional cleanup
-    }
+    const saved = localStorage.getItem('navaSandboxPrompt');
+    if (saved) setPrompt(saved);
   }, []);
 
-  async function generateTextOrCode(prompt) {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
-
-    setSteps([{ id: 1, title: 'Processing Prompt', description: ['Sending request to LLM...'], icon: Play }]);
-
-    const res = await fetch(`${backendUrl}/api/run`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt }),
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => null);
-      throw new Error(err?.detail || "Text generation failed");
-    }
-
-    const data = await res.json();
-    setFinalOutput(data.output || JSON.stringify(data, null, 2));
-
-    setSteps((prev) => [
-      ...prev,
-      { id: 2, title: '✅ Completed', description: ['Text/code generation finished.'], icon: Play },
-    ]);
-  }
-
-
   const handleGenerate = async () => {
-  if (!prompt.trim()) return;
+    if (!prompt.trim()) return;
 
-  setIsGenerating(true);
-  setSteps([]);
-  setFinalOutput('');
-  setImageUrl(null); // clear old image
+    setIsGenerating(true);
+    setSteps([]);
+    setFinalOutput('');
+    setCodeOutput('');
+    setLivePreview('');
+    setImageUrl(null);
 
-  try {
-    const lowerPrompt = prompt.toLowerCase();
+    try {
+      const backendUrl = (
+        import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+      ).replace(/\/$/, '');
 
-    // ✅ Detect if the user wants an image
-    const isImageRequest =
-      lowerPrompt.includes('image') ||
-      lowerPrompt.includes('photo') ||
-      lowerPrompt.includes('picture') ||
-      lowerPrompt.includes('draw') ||
-      lowerPrompt.includes('illustration');
-
-    // ✅ Normalize backend URL (remove trailing slash)
-    const backendUrl = (import.meta.env.VITE_BACKEND_URL || "http://localhost:8000").replace(/\/$/, '');
-
-    if (isImageRequest) {
-      // 🖼️ Image generation flow
-      setSteps([{ id: 1, title: 'Image Generation', description: ['Generating your image...'], icon: Play }]);
-
-      const res = await fetch(`${backendUrl}/api/generate-image`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, size: "1024x1024" }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => null);
-        throw new Error(err?.detail || `Failed to generate image (HTTP ${res.status})`);
-      }
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      setImageUrl(url);
-
-      setSteps((prev) => [
-        ...prev,
-        { id: 2, title: '✅ Completed', description: ['Image generated successfully.'], icon: Play },
+      setSteps([
+        {
+          id: 1,
+          title: 'Processing',
+          description: ['Analyzing your request...'],
+          icon: Play,
+        },
       ]);
 
-    } else {
-      // 🧠 Normal text/code generation
-      await generateTextOrCode(prompt);
+      const res = await fetch(`${backendUrl}/api/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+      console.log('🧩 Backend response:', data);
+
+      // 🖼️ IMAGE HANDLING (Replicate API)
+      if (data.type === 'image') {
+        const imageUrl = data.image_url || data.url;
+        if (!imageUrl) throw new Error('Image URL missing from backend.');
+
+        setSteps((prev) => [
+          ...prev,
+          {
+            id: 2,
+            title: '🖼️ Image Ready',
+            description: ['Image generated successfully.'],
+            icon: Play,
+          },
+        ]);
+
+        setFinalOutput('');
+        setCodeOutput('');
+        setLivePreview('');
+        setImageUrl(imageUrl);
+        return; // stop further checks
+      }
+
+      // 🌐 WEBSITE HANDLING
+      else if (data.type === 'website') {
+        const htmlCode = data.html || data.code || data.output || '';
+        setCodeOutput(htmlCode);
+        setLivePreview(htmlCode);
+        setSteps((prev) => [
+          ...prev,
+          {
+            id: 2,
+            title: '🌐 Website Ready',
+            description: ['HTML/CSS/JS generated successfully.'],
+            icon: Play,
+          },
+        ]);
+      }
+
+      // 💻 CODE HANDLING
+      else if (data.type === 'code') {
+        setCodeOutput(data.output || '');
+        setSteps((prev) => [
+          ...prev,
+          {
+            id: 2,
+            title: '✅ Code Ready',
+            description: ['Code generated successfully.'],
+            icon: Play,
+          },
+        ]);
+      }
+
+      // 🧾 TEXT HANDLING
+      else {
+        setFinalOutput(data.output || JSON.stringify(data, null, 2));
+      }
+    } catch (err: any) {
+      console.error('⚠️ Generation error:', err);
+      setSteps((prev) => [
+        ...prev,
+        {
+          id: 99,
+          title: 'Error',
+          description: [err.message || 'Unexpected error occurred.'],
+          icon: Play,
+        },
+      ]);
+    } finally {
+      setIsGenerating(false);
     }
-  } catch (err) {
-    console.error("⚠️ Generation error:", err);
-    setSteps((prev) => [
-      ...prev,
-      { id: 99, title: 'Error', description: [err.message || 'Unexpected error'], icon: Play },
-    ]);
-  } finally {
-    setIsGenerating(false);
-  }
-};
+  };
+
+  const openWebsiteInNewTab = (htmlContent: string) => {
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  };
 
   const isDarkMode = () =>
-    typeof window !== "undefined" && document.documentElement.classList.contains("dark");
+    typeof window !== 'undefined' &&
+    document.documentElement.classList.contains('dark');
 
   return (
     <div className="flex-1 flex flex-col">
+      {/* Header */}
       <div className="p-6 flex justify-between items-center">
         <div>
           <h1 className="text-2xl mb-1">Sandbox</h1>
           {autoRun && <p>Auto-running your sandbox...</p>}
-          <p className="text-muted-foreground">Experiment, test, and refine your AI prompts here</p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <Button variant="outline"><Share className="w-4 h-4 mr-2" />Share</Button>
-          <Button variant="outline"><Download className="w-4 h-4 mr-2" />Export</Button>
+          <p className="text-muted-foreground">
+            Experiment, test, and refine your AI prompts here
+          </p>
         </div>
       </div>
 
@@ -153,27 +177,39 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
                 <s.icon className="w-4 h-4 text-blue-600" />
                 <div>
                   <p className="font-medium">{s.title}</p>
-                  <p className="text-xs text-muted-foreground">{s.description.join('\n')}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {s.description.join('\n')}
+                  </p>
                 </div>
               </div>
             ))}
 
+            {/* Prompt input */}
             <div className="p-4 border-t border-border/30">
               <div className="flex items-center space-x-3 bg-muted/30 rounded-lg p-3">
                 <Search className="w-4 h-4 text-muted-foreground" />
                 <Input
                   value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
+                  onChange={(e) => {
+                    setPrompt(e.target.value);
+                    localStorage.setItem('navaSandboxPrompt', e.target.value);
+                  }}
                   placeholder="Enter your prompt..."
                   className="flex-1 bg-transparent border-none focus:ring-0"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !isGenerating) handleGenerate();
+                  }}
                 />
-                <Button onClick={handleGenerate} className="bg-gradient-to-r from-[#7B61FF] to-[#9F7AEA] text-white">
+                <Button
+                  onClick={handleGenerate}
+                  disabled={isGenerating}
+                  className="bg-gradient-to-r from-[#7B61FF] to-[#9F7AEA] text-white"
+                >
                   <Play className="w-3 h-3 mr-1" /> Generate
                 </Button>
               </div>
             </div>
           </div>
-
         </div>
 
         {/* Output Panel */}
@@ -182,80 +218,60 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
             <h3 className="font-medium flex items-center">
               <Code className="w-4 h-4 mr-2 text-[#7B61FF]" /> Output
             </h3>
-            {finalOutput && (
+            {livePreview && (
               <Button
+                onClick={() => openWebsiteInNewTab(livePreview)}
                 variant="outline"
-                size="sm"
-                onClick={() => {
-                  navigator.clipboard.writeText(finalOutput);
-                  const btn = document.activeElement as HTMLButtonElement;
-                  const originalText = btn.innerText;
-                  btn.innerText = 'Copied!';
-                  setTimeout(() => {
-                    btn.innerText = originalText;
-                  }, 2000);
-                }}
+                className="text-white bg-gradient-to-r from-[#7B61FF] to-[#9F7AEA] hover:opacity-90"
               >
-                <Copy className="w-4 h-4 mr-2" /> Copy
+                <Globe className="w-4 h-4 mr-2" /> Run Website
               </Button>
             )}
           </div>
 
-          <div
-            className="flex-1 bg-card/80 rounded-xl overflow-auto p-4"
-            style={{
-              maxHeight: "70vh", // keeps it from taking full screen height
-              overflowY: "auto",
-              overflowX: "hidden",
-              wordWrap: "break-word",
-              whiteSpace: "pre-wrap",
-            }}
-          >
+          <div className="flex-1 bg-card/80 rounded-xl overflow-auto p-4 space-y-6">
             {isGenerating ? (
               <p className="text-sm text-muted-foreground italic">
-                Generating... please wait for steps to finish.
+                Generating... please wait.
               </p>
             ) : imageUrl ? (
-              <div className="flex justify-center mt-4">
+              <div className="flex flex-col items-center space-y-4">
                 <img
                   src={imageUrl}
-                  alt="Generated by AI"
-                  className="rounded-xl shadow-md w-full max-w-md"
+                  alt="Generated result"
+                  className="max-w-full rounded-lg shadow-md border border-border"
                 />
-              </div>
-            ) : finalOutput ? (
-              <>
-                {/* existing SyntaxHighlighter + iframe preview */}
-                <div
-                  style={{
-                    maxHeight: "60vh",
-                    overflowY: "auto",
-                    overflowX: "hidden",
-                  }}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(imageUrl, '_blank')}
+                  className="bg-gradient-to-r from-[#7B61FF] to-[#9F7AEA] text-white"
                 >
-                  <SyntaxHighlighter
-                    language="html"
-                    style={isDarkMode() ? darkStyle : lightStyle}
-                    customStyle={{
-                      borderRadius: "10px",
-                      padding: "16px",
-                      fontSize: "0.85rem",
-                      background: isDarkMode() ? "#1e1e1e" : "#f5f5f5",
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
-                    }}
-                  >
-                    {finalOutput}
-                  </SyntaxHighlighter>
-                </div>
-              </>
+                  View Full Image
+                </Button>
+              </div>
+            ) : codeOutput ? (
+              <SyntaxHighlighter
+                language="html"
+                style={isDarkMode() ? darkStyle : lightStyle}
+                customStyle={{
+                  borderRadius: '10px',
+                  padding: '16px',
+                  fontSize: '0.9rem',
+                }}
+              >
+                {codeOutput}
+              </SyntaxHighlighter>
+            ) : finalOutput ? (
+              <div>{finalOutput}</div>
             ) : (
-              <p className="text-sm text-muted-foreground">Output will appear here...</p>
+              <p className="text-sm text-muted-foreground">
+                Output will appear here...
+              </p>
             )}
           </div>
-
         </div>
       </div>
     </div>
   );
-}
+};

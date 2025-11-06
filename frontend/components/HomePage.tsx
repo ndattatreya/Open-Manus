@@ -432,14 +432,17 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* Text Input */}
-              <Input
+                <Input
                 value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
+                onChange={(e) => {
+                  setPrompt(e.target.value);
+                  // Store in localStorage for sandbox access
+                  localStorage.setItem('navaSandboxPrompt', e.target.value);
+                }}
                 onKeyPress={handleKeyPress}
                 placeholder="Ask Nava AI anything..."
                 className="flex-1 text-sm sm:text-base bg-transparent border-none focus:ring-0 focus:outline-none placeholder:text-muted-foreground/70"
-              />
+                />
 
               {/* Action Buttons */}
               <div className="flex items-center space-x-1 sm:space-x-1.5">
