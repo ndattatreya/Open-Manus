@@ -140,16 +140,23 @@ async def run_prompt(request: PromptRequest):
     # ======================================================
     # 🧠 1️⃣ Detect Intent (semantic classification)
     # ======================================================
-    intent_prompt = f"""
-    Classify the following request into exactly one category:
-    - image
-    - code
-    - website
-    - presentation
-    - text
+    # ======================================================
+# 🧠 1️⃣ Detect Intent (simplified fallback)
+# ======================================================
+    intent_keywords = {
+        "image": ["image", "draw", "picture", "photo", "illustration", "logo", "design"],
+        "presentation": ["presentation", "slides", "ppt"],
+        "website": ["website", "webpage", "landing page"],
+        "code": ["code", "script", "function", "program", "algorithm"]
+    }
 
-    User prompt: "{prompt}"
-    """
+    intent = "text"
+    for key, words in intent_keywords.items():
+        if any(word in prompt.lower() for word in words):
+            intent = key
+            break
+
+    print(f"🎯 Detected intent (keyword-based): {intent}")
 
     headers = {
         "Authorization": f"Bearer {openrouter_key}",
