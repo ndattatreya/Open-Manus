@@ -312,3 +312,8 @@ async def live_preview(request: PromptRequest):
         return JSONResponse({"type": "website", "html": html_content})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Website generation failed: {str(e)}")
+
+if __name__ == "__main__":
+    import uvicorn, os
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("api:app", host="0.0.0.0", port=port)
