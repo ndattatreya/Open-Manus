@@ -18,6 +18,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { VoiceModal } from './VoiceModal';
 import { AnimatedSphere } from './AnimatedSphere';
 import { ChatMessage, ChatSession } from '../App';
+import { useUser, UserButton } from "@clerk/clerk-react";
 
 interface HomePageProps {
   onNavigateToSandbox?: () => void;
@@ -28,7 +29,6 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
   const [email, setEmail] = useState('');
   const [isDraft, setIsDraft] = useState(true);
   const [isPrivate, setIsPrivate] = useState(true);
-  const [username, setUsername] = useState('');
   const [prompt, setPrompt] = useState('');
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState('Nava AI');
@@ -41,14 +41,15 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    // Load email and username from localStorage on mount
-    const storedEmail = localStorage.getItem('email') || '';
-    const storedUsername = localStorage.getItem('username') || '';
+  const { user } = useUser();
 
-    setEmail(storedEmail);
-    setUsername(storedUsername || (storedEmail ? storedEmail.split('@')[0] : ''));
-  }, []);
+  const userEmail = user?.primaryEmailAddress?.emailAddress;
+
+  const username =
+    user?.username ||
+    user?.firstName ||
+    user?.fullName ||
+    (userEmail ? userEmail.split("@")[0] : "User");
 
   useEffect(() => {
     const savedDraft = localStorage.getItem('isDraft');
@@ -161,11 +162,11 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
 
     // Basic greetings
     if (input === 'hi' || input === 'hey') {
-      return 'Hi Yeswanth Kosuri! How can I help you today?';
+      return `Hi ${username}! How can I help you today?`;
     }
 
     if (input === 'hello' || input.startsWith('hello')) {
-      return 'Hello Yeswanth Kosuri! What would you like me to create for you?';
+      return `Hello ${username}! What would you like me to create for you?`;
     }
 
     // Mathematical operations
@@ -432,7 +433,7 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
                 </DropdownMenuContent>
               </DropdownMenu>
 
-                <Input
+              <Input
                 value={prompt}
                 onChange={(e) => {
                   setPrompt(e.target.value);
@@ -442,7 +443,7 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
                 onKeyPress={handleKeyPress}
                 placeholder="Ask Nava AI anything..."
                 className="flex-1 text-sm sm:text-base bg-transparent border-none focus:ring-0 focus:outline-none placeholder:text-muted-foreground/70"
-                />
+              />
 
               {/* Action Buttons */}
               <div className="flex items-center space-x-1 sm:space-x-1.5">

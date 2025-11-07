@@ -125,10 +125,45 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
+      // ✅ Detect if it's a PPTX file before parsing
+      const contentType = res.headers.get('Content-Type') || '';
+      const fileType = res.headers.get('X-File-Type');
+
+      if (
+        contentType.includes('presentation') ||
+        fileType === 'pptx' ||
+        contentType.includes('application/vnd.openxmlformats')
+      ) {
+        console.log('📊 Detected PPTX file. Triggering download...');
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${prompt.replace(/\s+/g, '_').slice(0, 40)}.pptx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+
+        setSteps((prev) => [
+          ...prev,
+          {
+            id: 2,
+            title: '📊 PPT Ready',
+            description: ['PowerPoint file downloaded successfully.'],
+            icon: Play,
+          },
+        ]);
+
+        setFinalOutput('✅ PowerPoint downloaded successfully!');
+        return; // stop here to prevent JSON parsing
+      }
+
+      // 🧾 Otherwise parse JSON as usual
       const data = await res.json();
       console.log('🧩 Backend response:', data);
 
-      // 🖼️ IMAGE HANDLING (Replicate API)
+      // 🖼️ IMAGE HANDLING
       if (data.type === 'image') {
         const imageUrl = data.image_url || data.url;
         if (!imageUrl) throw new Error('Image URL missing from backend.');
@@ -147,7 +182,7 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
         setCodeOutput('');
         setLivePreview('');
         setImageUrl(imageUrl);
-        return; // stop further checks
+        return;
       }
 
       // 🌐 WEBSITE HANDLING
