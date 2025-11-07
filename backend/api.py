@@ -138,9 +138,6 @@ async def run_prompt(request: PromptRequest):
         raise HTTPException(status_code=500, detail="Missing OPENROUTER_API_KEY")
 
     # ======================================================
-    # 🧠 1️⃣ Detect Intent (semantic classification)
-    # ======================================================
-    # ======================================================
 # 🧠 1️⃣ Detect Intent (simplified fallback)
 # ======================================================
     intent_keywords = {
@@ -170,7 +167,7 @@ async def run_prompt(request: PromptRequest):
         headers=headers,
         data=json.dumps({
             "model": "meta-llama/llama-3.1-8b-instruct:free",
-            "messages": [{"role": "user", "content": intent_prompt}]
+            "messages": [{"role": "user", "content": intent}]
         }),
     )
 
