@@ -8,39 +8,39 @@ interface LandingPageProps {
   onNavigateToLogin: () => void;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) => {  
+export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) => {
   const features = [
-  {
-    icon: Brain,
-    title: "AI-Powered Assistance",
-    description: "Harness the intelligence of Nava AI to create, analyze, and automate tasks efficiently."
-  },
-  {
-    icon: Zap,
-    title: "Lightning Fast",
-    description: "Get instant responses powered by real-time AI processing with minimal latency."
-  },
-  {
-    icon: Code,
-    title: "Smart Code Generation",
-    description: "Write, debug, and understand code effortlessly using built-in AI tools."
-  },
-  {
-    icon: Sparkles,
-    title: "Interactive Sandbox",
-    description: "Test ideas, code, and visualizations directly inside your browser environment."
-  },
-  {
-    icon: Shield,
-    title: "Secure & Reliable",
-    description: "Your data and projects are protected with top-tier encryption and privacy controls."
-  },
-  {
-    icon: Users,
-    title: "Collaborative Workspace",
-    description: "Work with teammates in real time on shared projects, notes, and code spaces."
-  }
-];
+    {
+      icon: Brain,
+      title: 'AI-Powered Intelligence',
+      description: 'Leverage cutting-edge AI models to automate complex tasks and generate intelligent solutions with natural language commands.'
+    },
+    {
+      icon: Zap,
+      title: 'Lightning Fast Performance',
+      description: 'Experience real-time code generation and instant results with our optimized AI engine built for speed and efficiency.'
+    },
+    {
+      icon: Code,
+      title: 'Smart Code Generation',
+      description: 'Generate production-ready code snippets, complete applications, and technical solutions with context-aware AI assistance.'
+    },
+    {
+      icon: Sparkles,
+      title: 'Interactive Sandbox',
+      description: 'Test and preview your AI-generated code in a live environment with instant feedback and iterative improvements.'
+    },
+    {
+      icon: Shield,
+      title: 'Secure & Private',
+      description: 'Your data and projects are protected with enterprise-grade security. We prioritize privacy and never share your information.'
+    },
+    {
+      icon: Users,
+      title: 'Collaborative Workflows',
+      description: 'Work seamlessly with your team, share AI-generated assets, and collaborate on projects in real-time.'
+    }
+  ];
 
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
@@ -65,7 +65,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
             <span className="font-semibold text-lg">Nava AI</span>
           </div>
 
-          <div className="hidden md:flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-8">
             <button
               onClick={() => scrollToSection('about')}
               className="text-muted-foreground hover:text-foreground transition-colors"
@@ -92,51 +92,49 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
             </button>
           </div>
 
-          {/* Mobile menu */}
-          <div className="md:hidden flex items-center gap-2">
-            <button
-              onClick={onNavigateToLogin}
-              className="px-4 py-2 rounded-lg bg-gradient-to-r from-[#7B61FF] to-[#3B82F6] text-white"
-            >
-              Login
-            </button>
-          </div>
+          {/* Mobile menu button */}
+          <button
+            onClick={onNavigateToLogin}
+            className="md:hidden px-4 py-2 rounded-lg bg-gradient-to-r from-[#7B61FF] to-[#3B82F6] text-white"
+          >
+            Login
+          </button>
         </nav>
       </motion.header>
 
       {/* Hero Section with 3D Sphere */}
       <section className="pt-32 pb-20 px-6 relative overflow-hidden">
         <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-12 items-center px-4 sm:px-6 md:px-8">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
             {/* Left side - Text content */}
             <motion.div
               initial={{ opacity: 0, x: -50 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.8, delay: 0.2 }}
-              className="text-center lg:text-left"
             >
-              <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold mb-3 sm:mb-5 bg-gradient-to-r from-[#7B61FF] to-[#3B82F6] bg-clip-text text-transparent leading-tight">
+              <h1 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-[#7B61FF] to-[#3B82F6] bg-clip-text text-transparent">
                 Welcome to Nava AI
               </h1>
-
-              <p className="text-base sm:text-lg md:text-xl text-muted-foreground mb-6 sm:mb-8 px-2 sm:px-0">
-                Transform your ideas into reality with our advanced AI-powered platform. Generate code, create applications, and innovate faster than ever before."
+              <p className="text-xl text-muted-foreground mb-8">
+                Transform your ideas into reality with our advanced AI-powered platform. 
+                Generate code, create applications, and innovate faster than ever before.
               </p>
-              <div className="flex flex-col sm:flex-row justify-center lg:justify-start gap-4 sm:gap-6">
+              <div className="flex flex-wrap gap-4">
                 <button
                   onClick={onNavigateToLogin}
-                  className="px-6 sm:px-8 py-3 rounded-xl bg-gradient-to-r from-[#7B61FF] to-[#3B82F6] text-white shadow-glow-hover transition-all w-full sm:w-auto"
+                  className="px-8 py-3 rounded-xl bg-gradient-to-r from-[#7B61FF] to-[#3B82F6] text-white shadow-glow-hover transition-all"
                 >
-                  getStarted
+                  Get Started
                 </button>
                 <button
                   onClick={() => scrollToSection('features')}
-                  className="px-6 sm:px-8 py-3 rounded-xl bg-card/50 backdrop-blur-sm hover:bg-card transition-all w-full sm:w-auto"
+                  className="px-8 py-3 rounded-xl bg-card/50 backdrop-blur-sm hover:bg-card transition-all"
                 >
-                  learnMore
+                  Learn More
                 </button>
               </div>
             </motion.div>
+
             {/* Right side - 3D Animated Sphere */}
             <motion.div
               className="flex items-center justify-center"
@@ -163,9 +161,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
           >
-            <h2 className="text-4xl font-bold mb-4">aboutTitle</h2>
+            <h2 className="text-4xl font-bold mb-4">About Nava AI</h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              aboutDescription
+              Nava AI is a next-generation platform that combines artificial intelligence 
+              with intuitive design to help developers, creators, and businesses build 
+              powerful applications faster. Our mission is to democratize AI and make 
+              advanced technology accessible to everyone.
             </p>
           </motion.div>
 
@@ -228,9 +229,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
           >
-            <h2 className="text-4xl font-bold mb-4">featuresTitle</h2>
+            <h2 className="text-4xl font-bold mb-4">Powerful Features</h2>
             <p className="text-xl text-muted-foreground">
-              featuresSubtitle
+              Everything you need to bring your AI-powered projects to life
             </p>
           </motion.div>
 
@@ -336,8 +337,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
                 Built for Modern Workflows
               </h2>
               <p className="text-xl text-muted-foreground mb-6">
-                Nava AI integrates seamlessly into your existing processes, enhancing
-                productivity without disrupting your workflow. Our platform is designed
+                Nava AI integrates seamlessly into your existing processes, enhancing 
+                productivity without disrupting your workflow. Our platform is designed 
                 to complement your creative process, not complicate it.
               </p>
               <div className="space-y-4">
@@ -381,7 +382,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
                 Cutting-Edge Technology
               </h2>
               <p className="text-xl text-muted-foreground mb-6">
-                Experience the future of AI-powered development. Our advanced algorithms
+                Experience the future of AI-powered development. Our advanced algorithms 
                 and neural network architecture deliver unparalleled performance and accuracy.
               </p>
               <div className="grid grid-cols-2 gap-4">
@@ -439,9 +440,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
           >
-            <h2 className="text-4xl font-bold mb-4">creatorsTitle</h2>
+            <h2 className="text-4xl font-bold mb-4">Meet the Creators</h2>
             <p className="text-xl text-muted-foreground">
-              creatorsSubtitle
+              Built by a passionate team dedicated to pushing the boundaries of AI
             </p>
           </motion.div>
 
@@ -504,9 +505,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
             </div>
             <h3 className="text-2xl font-semibold mb-4">Nava AI Team</h3>
             <p className="text-muted-foreground text-lg mb-6">
-              We're a team of engineers, designers, and AI researchers committed to
-              creating tools that empower creators and developers worldwide. Our diverse
-              backgrounds in machine learning, software engineering, and product design
+              We're a team of engineers, designers, and AI researchers committed to 
+              creating tools that empower creators and developers worldwide. Our diverse 
+              backgrounds in machine learning, software engineering, and product design 
               come together to build experiences that are both powerful and accessible.
             </p>
             <div className="flex justify-center gap-3">
@@ -533,16 +534,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
             transition={{ duration: 0.6 }}
           >
             <h2 className="text-4xl md:text-5xl font-bold mb-6">
-              ctaTitle
+              Ready to Get Started?
             </h2>
             <p className="text-xl text-muted-foreground mb-8">
-                ctaSubtitle
+              Join thousands of developers and creators using Nava AI to build the future
+              
             </p>
             <button
               onClick={onNavigateToLogin}
               className="px-10 py-4 rounded-xl bg-gradient-to-r from-[#7B61FF] to-[#3B82F6] text-white text-lg shadow-glow-hover transition-all"
             >
-              startCreating
+              Start Creating Now
             </button>
           </motion.div>
         </div>
@@ -556,9 +558,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigateToLogin }) =
       {/* Footer */}
       <footer className="py-12 px-6">
         <div className="max-w-7xl mx-auto text-center text-muted-foreground">
-          <p>footer</p>
+          <p>© 2025 Nava AI. All rights reserved.</p>
         </div>
       </footer>
     </div>
   );
-};
+}; 
