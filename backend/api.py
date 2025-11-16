@@ -135,8 +135,9 @@ def call_openrouter(prompt: str, system_instruction: str = None):
 
     # Primary model
     models_to_try = [
-        "meta-llama/llama-3.3-70b-instruct:free",  # ✅ new reliable free model
-        "mistralai/mixtral-8x7b",                  # fallback model
+        #"meta-llama/llama-3.3-70b-instruct:free",  # ✅ new reliable free model
+        #"mistralai/mixtral-8x7b",                  # fallback model
+        "deepseek/deepseek-r1-distill-llama-70b"
     ]
 
     for model in models_to_try:

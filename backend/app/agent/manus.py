@@ -1,7 +1,7 @@
 from typing import Dict, List, Optional
 import asyncio
 from pydantic import Field, model_validator
-
+from app.services.generator import generate_ppt, generate_image, generate_report, generate_website
 from app.agent.browser import BrowserContextHelper
 from app.agent.toolcall import ToolCallAgent
 from app.config import config
@@ -14,6 +14,12 @@ from app.tool.mcp import MCPClients, MCPClientTool
 from app.tool.python_execute import PythonExecute
 from app.tool.str_replace_editor import StrReplaceEditor
 
+from app.services.generator import (
+    generate_ppt,
+    generate_image,
+    generate_report,
+    generate_website,
+)
 
 class Manus(ToolCallAgent):
     """A versatile general-purpose agent with support for both local and MCP tools."""
@@ -218,3 +224,27 @@ class Manus(ToolCallAgent):
             yield "✅ Completed successfully."
         except Exception as e:
             yield f"❌ Error: {str(e)}"
+
+    async def run(self, prompt: str):
+        """
+        Main entry for executing generation tasks such as PPT, Image, Report, Website.
+        Falls back to normal multi-step reasoning if no generation task is detected.
+        """
+
+        p = prompt.lower()
+
+        # --- ROUTING LOGIC ---
+        if "ppt" in p or "presentation" in p:
+            return await self.generate_ppt_tool(prompt)
+
+        if "image" in p or "photo" in p or "picture" in p:
+            return await self.generate_image_tool(prompt)
+
+        if "report" in p or "pdf" in p:
+            return await self.generate_report_tool(prompt)
+
+        if "website" in p or "html" in p or "landing page" in p:
+            return await self.generate_website_tool(prompt)
+
+        # 🧠 Fall back to Manus's default ToolCallAgent thinking
+        return await super().run(prompt)
