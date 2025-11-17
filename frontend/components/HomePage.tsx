@@ -27,8 +27,7 @@ interface HomePageProps {
 
 export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps) {
   const [email, setEmail] = useState('');
-  const [isDraft, setIsDraft] = useState(true);
-  const [isPrivate, setIsPrivate] = useState(true);
+  const [isDraft, setIsDraft] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState('Nava AI');
@@ -52,21 +51,13 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
     (userEmail ? userEmail.split("@")[0] : "User");
 
   useEffect(() => {
-    const savedDraft = localStorage.getItem('isDraft');
-    const savedPrivate = localStorage.getItem('isPrivate');
-    if (savedDraft !== null) setIsDraft(savedDraft === 'true');
-    if (savedPrivate !== null) setIsPrivate(savedPrivate === 'true');
-  }, []);
-
-  useEffect(() => {
     localStorage.setItem('isDraft', String(isDraft));
-    localStorage.setItem('isPrivate', String(isPrivate));
-  }, [isDraft, isPrivate]);
+  }, [isDraft]);
 
 
   /** LISTEN FOR SANDBOX SAVE EVENTS **/
   useEffect(() => {
-    const refresh = (e: any) => {
+    const refresh = () => {
       const raw = localStorage.getItem("nava-ai-chat-history") || "[]";
       const history = JSON.parse(raw);
 
@@ -82,9 +73,11 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
     };
 
     window.addEventListener("nava-history-updated", refresh);
-    return () => window.removeEventListener("nava-history-updated", refresh);
-  }, [currentSessionId]);
 
+    return () => {
+      window.removeEventListener("nava-history-updated", refresh);
+    };
+  }, [currentSessionId]); // IMPORTANT
 
   const aiModels = [
     "GPT-4",
@@ -128,33 +121,31 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
     }
   }, [chatMessages]);
 
-  // Save chat to history when messages change
-  React.useEffect(() => {
-    if (chatMessages.length > 0) {
-      const existingHistory = JSON.parse(localStorage.getItem('nava-ai-chat-history') || '[]');
-      const sessionIndex = existingHistory.findIndex((session: any) => session.id === currentSessionId);
+  // Save chat to history ONLY when Published mode is enabled
+  useEffect(() => {
+    if (isDraft) return;      // ❌ NO SAVE IN DRAFT MODE
+    if (chatMessages.length === 0) return;
 
-      const sessionTitle = chatMessages[0]?.content.slice(0, 50) + (chatMessages[0]?.content.length > 50 ? '...' : '');
+    const existingHistory = JSON.parse(localStorage.getItem('nava-ai-chat-history') || '[]');
+    const idx = existingHistory.findIndex((s: any) => s.id === currentSessionId);
 
-      const session = {
-        id: currentSessionId,
-        title: sessionTitle,
-        messages: chatMessages,
-        createdAt: chatMessages[0]?.timestamp || new Date(),
-        lastUpdated: new Date()
-      };
+    const sessionTitle = chatMessages[0].content.slice(0, 50);
 
-      if (sessionIndex >= 0) {
-        existingHistory[sessionIndex] = session;
-      } else {
-        existingHistory.unshift(session);
-      }
+    const session = {
+      id: currentSessionId,
+      title: sessionTitle,
+      messages: chatMessages,
+      createdAt: chatMessages[0].timestamp,
+      lastUpdated: new Date()
+    };
 
-      // Keep only last 50 sessions
-      const limitedHistory = existingHistory.slice(0, 50);
-      localStorage.setItem('nava-ai-chat-history', JSON.stringify(limitedHistory));
-    }
-  }, [chatMessages, currentSessionId]);
+    if (idx >= 0) existingHistory[idx] = session;
+    else existingHistory.unshift(session);
+
+    localStorage.setItem("nava-ai-chat-history", JSON.stringify(existingHistory.slice(0, 50)));
+
+    window.dispatchEvent(new Event("nava-history-updated"));
+  }, [chatMessages, currentSessionId, isDraft]);
 
   const handleFileUpload = () => {
     fileInputRef.current?.click();
@@ -347,20 +338,7 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
                 >
                   {isDraft ? 'Draft' : 'Published'}
                 </span>
-
-                <span className="text-muted-foreground">•</span>
-
-                {/* Visibility toggle */}
-                <span
-                  onClick={() => setIsPrivate(prev => !prev)}
-                  className={`cursor-pointer hover:underline ${isPrivate ? 'text-muted-foreground' : 'text-green-400'
-                    }`}
-                >
-                  {isPrivate ? 'Private' : 'Public'}
-                </span>
               </div>
-
-
             </div>
           </div>
         ) : (
@@ -410,10 +388,9 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
         )}
       </div>
 
-      {/* Fixed Footer */}
       {/* Fixed Footer - Input Area */}
       <div
-        className="sticky bottom-0 left-0 w-full"
+        className=" bottom-0 left-0 w-full"
         style={{
           padding: "0.5rem 1rem",
           maxHeight: "30vh",

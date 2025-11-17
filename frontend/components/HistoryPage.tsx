@@ -19,15 +19,21 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
       if (!saved) return;
       const parsed = JSON.parse(saved);
 
-      setChatSessions(parsed.map((session: any) => ({
-        ...session,
-        createdAt: new Date(session.createdAt),
-        lastUpdated: new Date(session.lastUpdated),
-        messages: session.messages.map((msg: any) => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp)
+      // 🚫 FILTER OUT ALL DRAFT SESSIONS
+      const publishedOnly = parsed.filter((session: any) => session.isDraft !== true);
+
+      setChatSessions(
+        publishedOnly.map((session: any) => ({
+          ...session,
+          createdAt: new Date(session.createdAt),
+          lastUpdated: new Date(session.lastUpdated),
+          messages: session.messages.map((msg: any) => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp)
+          }))
         }))
-      })));
+      );
+
     };
 
     window.addEventListener("storage", sync);
@@ -197,20 +203,19 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
                         : 'bg-card/80 backdrop-blur-xl'
                         }`}
                     >
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                        {message.content.startsWith("data:image") ? (
-                          <img
-                            src={message.content}
-                            className="max-w-xs rounded-lg border border-border"
-                            alt="Generated"
-                          />
-                        ) : (
-                          <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                            {message.content}
-                          </p>
-                        )}
 
-                      </p>
+                      {message.content.startsWith("data:image") ? (
+                        <img
+                          src={message.content}
+                          className="max-w-xs rounded-lg border border-border"
+                          alt="Generated"
+                        />
+                      ) : (
+                        <span className="text-sm leading-relaxed whitespace-pre-wrap">
+                          {message.content}
+                        </span>
+                      )}
+
                       <div className={`text-xs mt-2 opacity-70 ${message.isUser ? 'text-white/70' : 'text-muted-foreground'}`}>
                         {message.timestamp.toLocaleString()}
                       </div>
