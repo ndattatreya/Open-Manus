@@ -20,6 +20,7 @@ import { AnimatedSphere } from './AnimatedSphere';
 import { ChatMessage, ChatSession } from '../App';
 import { useUser, UserButton } from "@clerk/clerk-react";
 
+
 interface HomePageProps {
   onNavigateToSandbox?: () => void;
   continueSession?: ChatSession | null;
@@ -41,6 +42,7 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { user } = useUser();
+  const HISTORY_KEY = user ? `nava-ai-history-${user.id}` : null;
 
   const userEmail = user?.primaryEmailAddress?.emailAddress;
 
@@ -54,11 +56,14 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
     localStorage.setItem('isDraft', String(isDraft));
   }, [isDraft]);
 
+  if (!user) return null;
 
   /** LISTEN FOR SANDBOX SAVE EVENTS **/
   useEffect(() => {
     const refresh = () => {
-      const raw = localStorage.getItem("nava-ai-chat-history") || "[]";
+      if (!HISTORY_KEY) return;
+
+      const raw = localStorage.getItem(HISTORY_KEY) || "[]";
       const history = JSON.parse(raw);
 
       const session = history.find((s: any) => s.id === currentSessionId);
@@ -72,12 +77,8 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
       }
     };
 
-    window.addEventListener("nava-history-updated", refresh);
-
-    return () => {
-      window.removeEventListener("nava-history-updated", refresh);
-    };
-  }, [currentSessionId]); // IMPORTANT
+    refresh();
+  }, [currentSessionId]);   // <----- FIXED
 
   const aiModels = [
     "GPT-4",
@@ -122,30 +123,43 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
   }, [chatMessages]);
 
   // Save chat to history ONLY when Published mode is enabled
-  useEffect(() => {
-    if (isDraft) return;      // ❌ NO SAVE IN DRAFT MODE
+  React.useEffect(() => {
+    if (!HISTORY_KEY) return;
     if (chatMessages.length === 0) return;
 
-    const existingHistory = JSON.parse(localStorage.getItem('nava-ai-chat-history') || '[]');
-    const idx = existingHistory.findIndex((s: any) => s.id === currentSessionId);
+    const raw = localStorage.getItem(HISTORY_KEY) || "[]";
+    const existingHistory = JSON.parse(raw);
 
-    const sessionTitle = chatMessages[0].content.slice(0, 50);
+    const sessionIndex = existingHistory.findIndex(
+      (s: any) => s.id === currentSessionId
+    );
+
+    const sessionTitle =
+      chatMessages[0]?.content.slice(0, 50) +
+      (chatMessages[0]?.content.length > 50 ? "..." : "");
 
     const session = {
       id: currentSessionId,
       title: sessionTitle,
       messages: chatMessages,
-      createdAt: chatMessages[0].timestamp,
-      lastUpdated: new Date()
+      createdAt: chatMessages[0]?.timestamp || new Date(),
+      lastUpdated: new Date(),
+      isDraft: isDraft
     };
 
-    if (idx >= 0) existingHistory[idx] = session;
-    else existingHistory.unshift(session);
+    if (sessionIndex >= 0) {
+      existingHistory[sessionIndex] = session;
+    } else {
+      existingHistory.unshift(session);
+    }
 
-    localStorage.setItem("nava-ai-chat-history", JSON.stringify(existingHistory.slice(0, 50)));
+    // Save NEW user-specific history
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(existingHistory));
 
+    // Notify history page
     window.dispatchEvent(new Event("nava-history-updated"));
-  }, [chatMessages, currentSessionId, isDraft]);
+
+  }, [chatMessages, currentSessionId, HISTORY_KEY, isDraft]);
 
   const handleFileUpload = () => {
     fileInputRef.current?.click();
