@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Trash2, Calendar, MessageSquare, Clock, ArrowRight } from 'lucide-react';
+import { Search, Trash2, Calendar, MessageSquare, Clock, ArrowRight, Star } from 'lucide-react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { ChatMessage, ChatSession } from '../App';
@@ -12,6 +12,7 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [showFavorites, setShowFavorites] = useState(false);
 
   useEffect(() => {
     const sync = () => {
@@ -36,16 +37,40 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
 
     };
 
+    // Listen for updates and also run an initial sync
     window.addEventListener("storage", sync);
     window.addEventListener("focus", sync);
+    sync();
+
+    // If Sidebar set favorites mode, read it and clear the flag
+    const mode = localStorage.getItem('nava-ai-history-filter');
+    if (mode === 'favorites') {
+      setShowFavorites(true);
+      localStorage.removeItem('nava-ai-history-filter');
+    }
+
+    // Listen for custom events from Sidebar so we can react even when mounted
+    const onFilterEvent = (e: any) => {
+      // 'favorites' -> show only favorites, anything else ('all'|'history') -> show all
+      if (e && e.detail === 'favorites') {
+        setShowFavorites(true);
+      } else {
+        setShowFavorites(false);
+      }
+    };
+
+    window.addEventListener('nava-ai-history-filter', onFilterEvent as EventListener);
 
     return () => {
       window.removeEventListener("storage", sync);
       window.removeEventListener("focus", sync);
+      window.removeEventListener('nava-ai-history-filter', onFilterEvent as EventListener);
     };
   }, []);
 
-  const filteredSessions = chatSessions.filter(session =>
+  const baseSessions = showFavorites ? chatSessions.filter(s => s.isFavorite) : chatSessions;
+
+  const filteredSessions = baseSessions.filter(session =>
     session.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     session.messages.some(msg =>
       msg.content.toLowerCase().includes(searchQuery.toLowerCase())
@@ -71,6 +96,12 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
     }
   };
 
+  const toggleFavorite = (sessionId: string) => {
+    const updated = chatSessions.map(s => s.id === sessionId ? { ...s, isFavorite: !s.isFavorite } : s);
+    setChatSessions(updated);
+    localStorage.setItem('nava-ai-chat-history', JSON.stringify(updated));
+  };
+
   const selectedSessionData = chatSessions.find(session => session.id === selectedSession);
 
   return (
@@ -79,7 +110,7 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
       <div className="w-1/3 bg-card/30 backdrop-blur-xl">
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Chat History</h2>
+            <h2 className="text-xl font-semibold">{showFavorites ? 'Favorites' : 'Chat History'}</h2>
             <Button
               onClick={clearHistory}
               variant="outline"
@@ -106,7 +137,7 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
             <div className="p-6 text-center">
               <MessageSquare className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
               <p className="text-muted-foreground">
-                {searchQuery ? 'No conversations found' : 'No chat history yet'}
+                {searchQuery ? 'No conversations found' : (showFavorites ? 'No favorites yet' : 'No chat history yet')}
               </p>
               <p className="text-sm text-muted-foreground mt-2">
                 Start chatting to see your conversations here
@@ -125,15 +156,28 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
                     <h3 className="font-medium text-sm truncate flex-1 mr-2">
                       {session.title}
                     </h3>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteSession(session.id);
-                      }}
-                      className="text-muted-foreground hover:text-destructive p-1"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFavorite(session.id);
+                        }}
+                        aria-label={session.isFavorite ? 'Unfavorite' : 'Add to favorites'}
+                        className={`p-1 ${session.isFavorite ? 'text-yellow-400' : 'text-muted-foreground'} hover:opacity-80`}
+                      >
+                        <Star className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteSession(session.id);
+                        }}
+                        className="text-muted-foreground hover:text-destructive p-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex items-center space-x-2 text-xs text-muted-foreground">
