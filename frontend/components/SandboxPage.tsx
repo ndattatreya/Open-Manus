@@ -25,6 +25,9 @@ interface SandboxPageProps {
   autoRun?: boolean;
 }
 
+
+
+
 export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => {
   const [prompt, setPrompt] = useState('');
   const [steps, setSteps] = useState<any[]>([]);
@@ -93,146 +96,104 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
     pptx.writeFile({ fileName: 'slides_output.pptx' });
   };
 
+  const saveSandboxToHistory = (prompt: string, output: string, type: string) => {
+    const historyRaw = localStorage.getItem("nava-ai-chat-history");
+    let history = historyRaw ? JSON.parse(historyRaw) : [];
+
+    const sessionId = localStorage.getItem("sandbox-session-id");
+    if (!sessionId) return;
+
+    const index = history.findIndex((s: any) => s.id === sessionId);
+    if (index === -1) return;
+
+    // add the user prompt
+    history[index].messages.push({
+      id: crypto.randomUUID(),
+      content: prompt,
+      isUser: true,
+      timestamp: new Date()
+    });
+
+    // add sandbox output
+    history[index].messages.push({
+      id: crypto.randomUUID(),
+      content: output,
+      isUser: false,
+      timestamp: new Date()
+    });
+
+    history[index].lastUpdated = new Date();
+
+    localStorage.setItem("nava-ai-chat-history", JSON.stringify(history));
+
+    // 🔥 Notify HomePage to refresh
+    window.dispatchEvent(
+      new CustomEvent("nava-history-updated", {
+        detail: { sessionId }
+      })
+    );
+  };
+
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
 
     setIsGenerating(true);
-    setSteps([]);
-    setFinalOutput('');
-    setCodeOutput('');
-    setLivePreview('');
+    setFinalOutput("");
+    setCodeOutput("");
+    setLivePreview("");
     setImageUrl(null);
 
-    try {
-      const backendUrl = (
-        import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
-      ).replace(/\/$/, '');
+    const backendUrl = (import.meta.env.VITE_BACKEND_URL || "http://localhost:8000")
+      .replace(/\/$/, "");
 
-      setSteps([
-        {
-          id: 1,
-          title: 'Processing',
-          description: ['Analyzing your request...'],
-          icon: Play,
-        },
-      ]);
+    const res = await fetch(`${backendUrl}/api/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
 
-      const res = await fetch(`${backendUrl}/api/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
-      });
+    const contentType = res.headers.get("Content-Type") || "";
+    const fileType = res.headers.get("X-File-Type");
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    /** PPT FILE */
+    if (fileType === "pptx" || contentType.includes("presentation")) {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
 
-      // ✅ Detect if it's a PPTX file before parsing
-      const contentType = res.headers.get('Content-Type') || '';
-      const fileType = res.headers.get('X-File-Type');
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${prompt.slice(0, 40)}.pptx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
 
-      if (
-        contentType.includes('presentation') ||
-        fileType === 'pptx' ||
-        contentType.includes('application/vnd.openxmlformats')
-      ) {
-        console.log('📊 Detected PPTX file. Triggering download...');
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${prompt.replace(/\s+/g, '_').slice(0, 40)}.pptx`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
+      saveSandboxToHistory(prompt, "PPT Generated", "ppt");
 
-        setSteps((prev) => [
-          ...prev,
-          {
-            id: 2,
-            title: '📊 PPT Ready',
-            description: ['PowerPoint file downloaded successfully.'],
-            icon: Play,
-          },
-        ]);
-
-        setFinalOutput('✅ PowerPoint downloaded successfully!');
-        return; // stop here to prevent JSON parsing
-      }
-
-      // 🧾 Otherwise parse JSON as usual
-      const data = await res.json();
-      console.log('🧩 Backend response:', data);
-
-      // 🖼️ IMAGE HANDLING
-      if (data.type === 'image') {
-        const imageUrl = data.image_url || data.url;
-        if (!imageUrl) throw new Error('Image URL missing from backend.');
-
-        setSteps((prev) => [
-          ...prev,
-          {
-            id: 2,
-            title: '🖼️ Image Ready',
-            description: ['Image generated successfully.'],
-            icon: Play,
-          },
-        ]);
-
-        setFinalOutput('');
-        setCodeOutput('');
-        setLivePreview('');
-        setImageUrl(imageUrl);
-        return;
-      }
-
-      // 🌐 WEBSITE HANDLING
-      else if (data.type === 'website') {
-        const htmlCode = data.html || data.code || data.output || '';
-        setCodeOutput(htmlCode);
-        setLivePreview(htmlCode);
-        setSteps((prev) => [
-          ...prev,
-          {
-            id: 2,
-            title: '🌐 Website Ready',
-            description: ['HTML/CSS/JS generated successfully.'],
-            icon: Play,
-          },
-        ]);
-      }
-
-      // 💻 CODE HANDLING
-      else if (data.type === 'code') {
-        setCodeOutput(data.output || '');
-        setSteps((prev) => [
-          ...prev,
-          {
-            id: 2,
-            title: '✅ Code Ready',
-            description: ['Code generated successfully.'],
-            icon: Play,
-          },
-        ]);
-      }
-
-      // 🧾 TEXT HANDLING
-      else {
-        setFinalOutput(data.output || JSON.stringify(data, null, 2));
-      }
-    } catch (err: any) {
-      console.error('⚠️ Generation error:', err);
-      setSteps((prev) => [
-        ...prev,
-        {
-          id: 99,
-          title: 'Error',
-          description: [err.message || 'Unexpected error occurred.'],
-          icon: Play,
-        },
-      ]);
-    } finally {
       setIsGenerating(false);
+      return;
     }
+
+    /** JSON OUTPUT */
+    const data = await res.json();
+
+    if (data.type === "image") {
+      setImageUrl(data.image_url || data.url);
+      saveSandboxToHistory(prompt, data.image_url || data.url, "image");
+    } else if (data.type === "website") {
+      const html = data.html || data.output || "";
+      setCodeOutput(html);
+      setLivePreview(html);
+      saveSandboxToHistory(prompt, html, "website");
+    } else if (data.type === "code") {
+      setCodeOutput(data.output);
+      saveSandboxToHistory(prompt, data.output, "code");
+    } else {
+      const textOut = data.output || JSON.stringify(data, null, 2);
+      setFinalOutput(textOut);
+      saveSandboxToHistory(prompt, textOut, "text");
+    }
+
+    setIsGenerating(false);
   };
 
   const openWebsiteInNewTab = (htmlContent: string) => {

@@ -27,11 +27,24 @@ export function Sidebar({ currentPage, onNavigate, isOpen, onClose }: SidebarPro
   };
 
   const handleFavorites = () => {
-    // For now, just show an alert - could navigate to favorites page later
-    alert('Favorites functionality coming soon!');
+    // Set a short-lived flag so HistoryPage can open in "favorites" mode
+    localStorage.setItem('nava-ai-history-filter', 'favorites');
+    // Dispatch a custom event so HistoryPage updates even when already mounted
+    try {
+      window.dispatchEvent(new CustomEvent('nava-ai-history-filter', { detail: 'favorites' }));
+    } catch (e) {
+      // ignore in environments where CustomEvent may be restricted
+    }
+    onNavigate('history');
+    onClose();
   };
 
   const handleHistory = () => {
+    // Clear any favorites-only filter so History shows all sessions
+    localStorage.removeItem('nava-ai-history-filter');
+    try {
+      window.dispatchEvent(new CustomEvent('nava-ai-history-filter', { detail: 'all' }));
+    } catch (e) {}
     onNavigate('history');
     onClose();
   };

@@ -3,6 +3,7 @@ import { Sidebar } from "./Sidebar";
 import { Navbar } from "./Navbar";
 import { useClerk } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
+import { ThemeProvider } from "./ThemeProvider";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -27,29 +28,34 @@ export function DashboardLayout({
   const toggleAppPreview = () => setShowAppPreview(!showAppPreview);
 
   const handleLogout = async () => {
-    await signOut(); // ✅ Clerk logs out
-    navigate("/");   // ✅ Redirects to Landing Page (Home)
+    await signOut();
+    navigate("/");
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
-      <Sidebar
-        currentPage={currentPage}
-        onNavigate={onNavigate}
-        isOpen={sidebarOpen}
-        onClose={closeSidebar}
-      />
-
-      <div className="flex-1 flex flex-col min-h-screen">
-        <Navbar
-          onToggleSidebar={toggleSidebar}
-          onToggleAppPreview={toggleAppPreview}
-          showAppPreview={showAppPreview}
-          onLogout={handleLogout} // ✅ Uses Clerk logout now
+    <ThemeProvider>
+      <div className="min-h-screen flex">
+        <Sidebar
+          currentPage={currentPage}
+          onNavigate={onNavigate}
+          isOpen={sidebarOpen}
+          onClose={closeSidebar}
         />
 
-        <div className="flex-1 overflow-hidden">{children}</div>
+        <div className="flex-1 flex flex-col min-h-screen">
+          <Navbar
+            onToggleSidebar={toggleSidebar}
+            onToggleAppPreview={toggleAppPreview}
+            showAppPreview={showAppPreview}
+            onLogout={handleLogout}
+          />
+
+          {/* ✅ This renders ONLY the current page (home/sandbox/history/pricing/etc.) */}
+          <div className="flex-1 overflow-hidden">
+            {children}
+          </div>
+        </div>
       </div>
-    </div>
+    </ThemeProvider>
   );
 }

@@ -27,6 +27,8 @@ export interface ChatSession {
   messages: ChatMessage[];
   createdAt: Date;
   lastUpdated: Date;
+  isFavorite?: boolean;
+  isDraft?: boolean;
 }
 
 export default function App() {

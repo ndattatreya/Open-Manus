@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import {
@@ -18,30 +18,89 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { VoiceModal } from './VoiceModal';
 import { AnimatedSphere } from './AnimatedSphere';
 import { ChatMessage, ChatSession } from '../App';
-import { useUser, UserButton } from "@clerk/clerk-react";
+import { useUser } from "@clerk/clerk-react";
 
 interface HomePageProps {
   onNavigateToSandbox?: () => void;
   continueSession?: ChatSession | null;
 }
 
+type StoredSession = {
+  id: string;
+  title?: string;
+  messages: ChatMessageSerializable[];
+  createdAt?: string;
+  lastUpdated?: string;
+  isDraft?: boolean;
+};
+
+type ChatMessageSerializable = Omit<ChatMessage, 'timestamp'> & { timestamp: string };
+
+// Safe JSON parse that never throws
+const safeJSONParse = (str: string, fallback: any) => {
+  try {
+    return JSON.parse(str);
+  } catch (e) {
+    console.warn('safeJSONParse failed, returning fallback', e);
+    return fallback;
+  }
+};
+
+// Convert ChatMessage -> ChatMessageSerializable
+const serializeMessages = (messages: ChatMessage[]) => {
+  return messages.map((m) => ({ ...m, timestamp: m.timestamp instanceof Date ? m.timestamp.toISOString() : new Date(m.timestamp).toISOString() }));
+};
+
+// Convert ChatMessageSerializable -> ChatMessage
+const deserializeMessages = (messages: ChatMessageSerializable[]) => {
+  return messages.map((m) => ({ ...m, timestamp: new Date(m.timestamp) }));
+};
+
+// Throttle writes to localStorage to avoid excessive churn
+const throttle = <T extends (...args: any[]) => void>(fn: T, wait = 350) => {
+  let last = 0;
+  let timeout: any = null;
+  return (...args: Parameters<T>) => {
+    const now = Date.now();
+    const remaining = wait - (now - last);
+    if (remaining <= 0) {
+      if (timeout) {
+        clearTimeout(timeout);
+        timeout = null;
+      }
+      last = now;
+      fn(...args);
+    } else if (!timeout) {
+      timeout = setTimeout(() => {
+        last = Date.now();
+        timeout = null;
+        fn(...args);
+      }, remaining);
+    }
+  };
+};
+
 export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps) {
-  const [email, setEmail] = useState('');
-  const [isDraft, setIsDraft] = useState(true);
-  const [isPrivate, setIsPrivate] = useState(true);
+  const [isDraft, setIsDraft] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState('Nava AI');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState(() => Date.now().toString());
   const [showOptions, setShowOptions] = useState(true);
+  const [pendingGenerate, setPendingGenerate] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [selectedOption, setSelectedOption] = useState<'Image' | 'Slides' | 'Spreadsheet' | 'Webpage' | 'Visualization' | 'More' | null>(null);
 
   const { user } = useUser();
+  const HISTORY_KEY = user ? `nava-ai-history-${user.id}` : null;
 
   const userEmail = user?.primaryEmailAddress?.emailAddress;
 
@@ -52,17 +111,8 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
     (userEmail ? userEmail.split("@")[0] : "User");
 
   useEffect(() => {
-    const savedDraft = localStorage.getItem('isDraft');
-    const savedPrivate = localStorage.getItem('isPrivate');
-    if (savedDraft !== null) setIsDraft(savedDraft === 'true');
-    if (savedPrivate !== null) setIsPrivate(savedPrivate === 'true');
-  }, []);
-
-  useEffect(() => {
     localStorage.setItem('isDraft', String(isDraft));
-    localStorage.setItem('isPrivate', String(isPrivate));
-  }, [isDraft, isPrivate]);
-
+  }, [isDraft]);
 
   const aiModels = [
     "GPT-4",
@@ -115,12 +165,13 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
       const sessionTitle = chatMessages[0]?.content.slice(0, 50) + (chatMessages[0]?.content.length > 50 ? '...' : '');
 
       const session = {
-        id: currentSessionId,
-        title: sessionTitle,
-        messages: chatMessages,
-        createdAt: chatMessages[0]?.timestamp || new Date(),
-        lastUpdated: new Date()
-      };
+      id: currentSessionId,
+      title: sessionTitle,
+      messages: chatMessages,
+      createdAt: chatMessages[0]?.timestamp || new Date(),
+      lastUpdated: new Date(),
+      isDraft: isDraft
+    };
 
       if (sessionIndex >= 0) {
         existingHistory[sessionIndex] = session;
@@ -132,14 +183,137 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
       const limitedHistory = existingHistory.slice(0, 50);
       localStorage.setItem('nava-ai-chat-history', JSON.stringify(limitedHistory));
     }
-  }, [chatMessages, currentSessionId]);
+  }, [chatMessages, currentSessionId, HISTORY_KEY, isDraft]);
 
   const handleFileUpload = () => {
     fileInputRef.current?.click();
   };
 
-  const handleImageUpload = () => {
-    imageInputRef.current?.click();
+  const handleImageUpload = async () => {
+    // Quickly generate an image from the current prompt without opening the file picker
+    if (!prompt.trim()) return;
+    setSelectedOption('Image');
+    setPendingGenerate(false);
+    // small delay so state settles
+    await new Promise((r) => setTimeout(r, 60));
+    performGeneration('Image');
+  };
+
+  const handleOptionClick = (opt: string) => {
+    setSelectedOption(opt as any);
+    setIsMoreMenuOpen(false);
+    if (pendingGenerate) {
+      setPendingGenerate(false);
+      // small delay so selectedOption state is set
+      setTimeout(() => performGeneration(opt), 40);
+    }
+  };
+
+  const transformPromptBasedOnOption = (opt: string, input: string) => {
+    switch (opt) {
+      case 'Image':
+        return `Generate an image: ${input}`;
+      case 'Slides':
+        return `Create slide notes and titles for: ${input}`;
+      case 'Spreadsheet':
+        return `Create a CSV/table for: ${input}`;
+      case 'Webpage':
+        return `Create a webpage (HTML) for: ${input}`;
+      case 'Visualization':
+        return `Suggest a visualization for: ${input}`;
+      default:
+        return input;
+    }
+  };
+
+  const performGeneration = (opt: string) => {
+    const finalPrompt = transformPromptBasedOnOption(opt, prompt);
+    const userMessage: ChatMessage = {
+      id: Date.now().toString(),
+      content: prompt,
+      isUser: true,
+      timestamp: new Date()
+    };
+    setChatMessages(prev => [...prev, userMessage]);
+
+    // Simple simulated generation using existing generateResponse for now
+    const aiText = generateResponse(finalPrompt);
+    const aiMessage: ChatMessage = {
+      id: (Date.now() + 1).toString(),
+      content: `${opt} result:\n${aiText}`,
+      isUser: false,
+      timestamp: new Date()
+    };
+    setTimeout(() => {
+      setChatMessages(prev => [...prev, aiMessage]);
+      // clear selection so next prompt requires choosing again
+      setSelectedOption(null);
+      setIsMoreMenuOpen(true); // reopen chooser for next prompt
+      setPrompt('');
+    }, 600);
+  };
+
+  const handleImageSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+
+    // Allow ONLY images
+    if (!f.type.startsWith("image/")) {
+      alert("Only image files are allowed!");
+      return;
+    }
+
+    setImageFile(f);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setImagePreview(dataUrl);
+
+      // Insert a user chat message with the data URL so the image appears inline
+      const userImageMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        content: dataUrl,
+        isUser: true,
+        timestamp: new Date()
+      };
+
+      setChatMessages(prev => [...prev, userImageMessage]);
+    };
+    reader.readAsDataURL(f);
+  };
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+
+    // If image, reuse image handler logic
+    if (f.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const userImageMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          content: dataUrl,
+          isUser: true,
+          timestamp: new Date()
+        };
+        setChatMessages(prev => [...prev, userImageMessage]);
+      };
+      reader.readAsDataURL(f);
+      return;
+    }
+
+    // For non-image files, create an object URL and store a small marker so the renderer can show a download link
+    const objectUrl = URL.createObjectURL(f);
+    const fileToken = `file:${objectUrl}||${f.name}`;
+    const fileMessage: ChatMessage = {
+      id: (Date.now() + 1).toString(),
+      content: fileToken,
+      isUser: true,
+      timestamp: new Date()
+    };
+    setChatMessages(prev => [...prev, fileMessage]);
   };
 
   const handleVoiceChat = () => {
@@ -242,18 +416,16 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
   const handleGenerate = () => {
     if (!prompt.trim()) return;
 
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      content: prompt,
-      isUser: true,
-      timestamp: new Date()
-    };
-
-    setChatMessages(prev => [...prev, userMessage]);
-
-    // Check if user wants code generation
+    // If user typed a code request, keep the existing sandbox flow
     if (prompt.toLowerCase().includes('code')) {
-      // Add a response message
+      const userMessage: ChatMessage = {
+        id: Date.now().toString(),
+        content: prompt,
+        isUser: true,
+        timestamp: new Date()
+      };
+      setChatMessages(prev => [...prev, userMessage]);
+
       const aiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         content: "I'll help you with that code! Opening the sandbox to generate and test your code...",
@@ -261,29 +433,16 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
         timestamp: new Date()
       };
       setChatMessages(prev => [...prev, aiMessage]);
-
-      // Navigate to sandbox after a brief delay
       setTimeout(() => {
-        if (onNavigateToSandbox) {
-          onNavigateToSandbox();
-        }
-      }, 1500);
-    } else {
-      // Generate regular response
-      const response = generateResponse(prompt);
-      const aiMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        content: response,
-        isUser: false,
-        timestamp: new Date()
-      };
-
-      setTimeout(() => {
-        setChatMessages(prev => [...prev, aiMessage]);
-      }, 500);
+        if (onNavigateToSandbox) onNavigateToSandbox();
+      }, 800);
+      setPrompt('');
+      return;
     }
 
-    setPrompt('');
+    // For all other content, require the user to pick a tool from the three-dots menu
+    setPendingGenerate(true);
+    setIsMoreMenuOpen(true);
   };
 
   return (
@@ -322,20 +481,7 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
                 >
                   {isDraft ? 'Draft' : 'Published'}
                 </span>
-
-                <span className="text-muted-foreground">•</span>
-
-                {/* Visibility toggle */}
-                <span
-                  onClick={() => setIsPrivate(prev => !prev)}
-                  className={`cursor-pointer hover:underline ${isPrivate ? 'text-muted-foreground' : 'text-green-400'
-                    }`}
-                >
-                  {isPrivate ? 'Private' : 'Public'}
-                </span>
               </div>
-
-
             </div>
           </div>
         ) : (
@@ -364,9 +510,29 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
                       : "bg-card border border-border"
                       }`}
                   >
-                    <p className="text-xs sm:text-sm leading-relaxed break-words">
-                      {message.content}
-                    </p>
+                    {message.content && message.content.startsWith('data:image') ? (
+                      <div className="max-w-[320px] sm:max-w-[480px]">
+                        <img src={message.content} alt="upload" className="rounded-lg max-w-full h-auto" />
+                      </div>
+                    ) : message.content && message.content.startsWith('file:') ? (
+                      (() => {
+                        const payload = message.content.replace(/^file:/, '');
+                        const parts = payload.split('||');
+                        const url = parts[0];
+                        const filename = parts[1] || 'file';
+                        return (
+                          <div>
+                            <a href={url} download={filename} className="text-sm text-primary underline">
+                              {`Download ${filename}`}
+                            </a>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <p className="text-xs sm:text-sm leading-relaxed break-words">
+                        {message.content}
+                      </p>
+                    )}
                     <div
                       className={`text-[10px] sm:text-[11px] mt-1 opacity-70 ${message.isUser ? "text-white/70" : "text-muted-foreground"
                         }`}
@@ -385,7 +551,6 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
         )}
       </div>
 
-      {/* Fixed Footer */}
       {/* Fixed Footer - Input Area */}
       <div
         className="sticky bottom-0 left-0 w-full"
@@ -457,7 +622,7 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
 
                 <button
                   onClick={handleImageUpload}
-                  className="p-1.5 sm:p-2 hover:bg-muted/50 rounded-lg"
+                  className={`p-1.5 sm:p-2 hover:bg-muted/50 rounded-lg ${selectedOption === 'Image' ? 'ring-2 ring-offset-1 ring-primary/30' : ''}`}
                   title="Upload image"
                 >
                   <Upload className="w-4 h-4 text-muted-foreground" />
@@ -471,8 +636,24 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
                   <Mic className="w-4 h-4 text-muted-foreground" />
                 </button>
 
-                {/* Compact More Menu */}
-                <DropdownMenu>
+                {/* Hidden image input for device uploads */}
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={handleImageSelected}
+                />
+                {/* Hidden generic file input for attachments */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  style={{ display: 'none' }}
+                  onChange={handleFileSelected}
+                />
+
+                {/* Compact More Menu (controlled) */}
+                <DropdownMenu open={isMoreMenuOpen} onOpenChange={(v) => setIsMoreMenuOpen(Boolean(v))}>
                   <DropdownMenuTrigger asChild>
                     <button
                       className="p-1.5 sm:p-2 hover:bg-muted/50 rounded-lg"
@@ -490,11 +671,12 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
                       return (
                         <DropdownMenuItem
                           key={i}
-                          onClick={() => console.log(`Selected: ${option.label}`)}
-                          className="flex items-center gap-2 text-sm hover:bg-muted/50 cursor-pointer"
+                          onClick={() => handleOptionClick(option.label as any)}
+                          className={`flex items-center gap-2 text-sm hover:bg-muted/50 cursor-pointer ${selectedOption === option.label ? 'bg-primary/10 text-primary' : ''}`}
                         >
                           <IconComponent className="w-4 h-4 text-muted-foreground" />
                           <span>{option.label}</span>
+                          {selectedOption === option.label && <span className="ml-2 text-xs">Selected</span>}
                         </DropdownMenuItem>
                       );
                     })}
@@ -533,4 +715,4 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
     </div>
 
   );
-}
+}  

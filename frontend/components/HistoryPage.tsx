@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Trash2, Calendar, MessageSquare, Clock, ArrowRight } from 'lucide-react';
+import { Search, Trash2, Calendar, MessageSquare, Clock, ArrowRight, Star } from 'lucide-react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { ChatMessage, ChatSession } from '../App';
@@ -12,14 +12,19 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [showFavorites, setShowFavorites] = useState(false);
 
   useEffect(() => {
-    // Load chat history from localStorage
-    const savedHistory = localStorage.getItem('nava-ai-chat-history');
-    if (savedHistory) {
-      try {
-        const parsed = JSON.parse(savedHistory);
-        setChatSessions(parsed.map((session: any) => ({
+    const sync = () => {
+      const saved = localStorage.getItem("nava-ai-chat-history");
+      if (!saved) return;
+      const parsed = JSON.parse(saved);
+
+      // 🚫 FILTER OUT ALL DRAFT SESSIONS
+      const publishedOnly = parsed.filter((session: any) => session.isDraft !== true);
+
+      setChatSessions(
+        publishedOnly.map((session: any) => ({
           ...session,
           createdAt: new Date(session.createdAt),
           lastUpdated: new Date(session.lastUpdated),
@@ -27,16 +32,47 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
             ...msg,
             timestamp: new Date(msg.timestamp)
           }))
-        })));
-      } catch (error) {
-        console.error('Error loading chat history:', error);
-      }
+        }))
+      );
+
+    };
+
+    // Listen for updates and also run an initial sync
+    window.addEventListener("storage", sync);
+    window.addEventListener("focus", sync);
+    sync();
+
+    // If Sidebar set favorites mode, read it and clear the flag
+    const mode = localStorage.getItem('nava-ai-history-filter');
+    if (mode === 'favorites') {
+      setShowFavorites(true);
+      localStorage.removeItem('nava-ai-history-filter');
     }
+
+    // Listen for custom events from Sidebar so we can react even when mounted
+    const onFilterEvent = (e: any) => {
+      // 'favorites' -> show only favorites, anything else ('all'|'history') -> show all
+      if (e && e.detail === 'favorites') {
+        setShowFavorites(true);
+      } else {
+        setShowFavorites(false);
+      }
+    };
+
+    window.addEventListener('nava-ai-history-filter', onFilterEvent as EventListener);
+
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("focus", sync);
+      window.removeEventListener('nava-ai-history-filter', onFilterEvent as EventListener);
+    };
   }, []);
 
-  const filteredSessions = chatSessions.filter(session =>
+  const baseSessions = showFavorites ? chatSessions.filter(s => s.isFavorite) : chatSessions;
+
+  const filteredSessions = baseSessions.filter(session =>
     session.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    session.messages.some(msg => 
+    session.messages.some(msg =>
       msg.content.toLowerCase().includes(searchQuery.toLowerCase())
     )
   );
@@ -60,6 +96,12 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
     }
   };
 
+  const toggleFavorite = (sessionId: string) => {
+    const updated = chatSessions.map(s => s.id === sessionId ? { ...s, isFavorite: !s.isFavorite } : s);
+    setChatSessions(updated);
+    localStorage.setItem('nava-ai-chat-history', JSON.stringify(updated));
+  };
+
   const selectedSessionData = chatSessions.find(session => session.id === selectedSession);
 
   return (
@@ -68,7 +110,7 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
       <div className="w-1/3 bg-card/30 backdrop-blur-xl">
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Chat History</h2>
+            <h2 className="text-xl font-semibold">{showFavorites ? 'Favorites' : 'Chat History'}</h2>
             <Button
               onClick={clearHistory}
               variant="outline"
@@ -78,7 +120,7 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
               <Trash2 className="w-4 h-4" />
             </Button>
           </div>
-          
+
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -95,7 +137,7 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
             <div className="p-6 text-center">
               <MessageSquare className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
               <p className="text-muted-foreground">
-                {searchQuery ? 'No conversations found' : 'No chat history yet'}
+                {searchQuery ? 'No conversations found' : (showFavorites ? 'No favorites yet' : 'No chat history yet')}
               </p>
               <p className="text-sm text-muted-foreground mt-2">
                 Start chatting to see your conversations here
@@ -107,34 +149,59 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
                 <div
                   key={session.id}
                   onClick={() => setSelectedSession(session.id)}
-                  className={`p-4 rounded-xl cursor-pointer transition-all hover:bg-muted/50 ${
-                    selectedSession === session.id ? 'bg-primary/10' : 'bg-card/50'
-                  }`}
+                  className={`p-4 rounded-xl cursor-pointer transition-all hover:bg-muted/50 ${selectedSession === session.id ? 'bg-primary/10' : 'bg-card/50'
+                    }`}
                 >
                   <div className="flex items-start justify-between mb-2">
                     <h3 className="font-medium text-sm truncate flex-1 mr-2">
                       {session.title}
                     </h3>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteSession(session.id);
-                      }}
-                      className="text-muted-foreground hover:text-destructive p-1"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFavorite(session.id);
+                        }}
+                        aria-label={session.isFavorite ? 'Unfavorite' : 'Add to favorites'}
+                        className={`p-1 ${session.isFavorite ? 'text-yellow-400' : 'text-muted-foreground'} hover:opacity-80`}
+                      >
+                        <Star className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteSession(session.id);
+                        }}
+                        className="text-muted-foreground hover:text-destructive p-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
-                  
+
                   <div className="flex items-center space-x-2 text-xs text-muted-foreground">
                     <Calendar className="w-3 h-3" />
                     <span>{session.lastUpdated.toLocaleDateString()}</span>
                     <Clock className="w-3 h-3 ml-2" />
                     <span>{session.lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
-                  
                   <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
-                    {session.messages[session.messages.length - 1]?.content || 'No messages'}
+                    {(() => {
+                      const last = session.messages[session.messages.length - 1];
+
+                      if (!last) return "No messages";
+
+                      // If content starts with "data:image" it's an image
+                      if (typeof last.content === "string" && last.content.startsWith("data:image"))
+                        return "🖼️ Image generated";
+
+                      // If it's long, shorten preview
+                      if (last.content.length > 120)
+                        return last.content.substring(0, 120) + "...";
+
+                      return last.content;
+                    })()}
                   </p>
                 </div>
               ))}
@@ -166,7 +233,7 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
                 )}
               </div>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-6">
               <div className="max-w-4xl mx-auto space-y-6">
                 {selectedSessionData.messages.map((message) => (
@@ -175,13 +242,24 @@ export function HistoryPage({ onContinueChat }: HistoryPageProps) {
                     className={`flex ${message.isUser ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-[80%] p-4 rounded-2xl ${
-                        message.isUser
-                          ? 'bg-gradient-to-r from-[#7B61FF] to-[#9F7AEA] text-white'
-                          : 'bg-card/80 backdrop-blur-xl'
-                      }`}
+                      className={`max-w-[80%] p-4 rounded-2xl ${message.isUser
+                        ? 'bg-gradient-to-r from-[#7B61FF] to-[#9F7AEA] text-white'
+                        : 'bg-card/80 backdrop-blur-xl'
+                        }`}
                     >
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+
+                      {message.content.startsWith("data:image") ? (
+                        <img
+                          src={message.content}
+                          className="max-w-xs rounded-lg border border-border"
+                          alt="Generated"
+                        />
+                      ) : (
+                        <span className="text-sm leading-relaxed whitespace-pre-wrap">
+                          {message.content}
+                        </span>
+                      )}
+
                       <div className={`text-xs mt-2 opacity-70 ${message.isUser ? 'text-white/70' : 'text-muted-foreground'}`}>
                         {message.timestamp.toLocaleString()}
                       </div>
