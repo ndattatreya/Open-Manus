@@ -367,7 +367,7 @@ class LLM:
         self,
         messages: List[Union[dict, Message]],
         system_msgs: Optional[List[Union[dict, Message]]] = None,
-        stream: bool = True,
+        stream: bool = False,
         temperature: Optional[float] = None,
     ) -> str:
         """
