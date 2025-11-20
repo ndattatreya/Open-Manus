@@ -28,7 +28,8 @@ class ImageGenerationTool(BaseTool):
         if not filename.endswith(".png"):
             return ToolResult(error="Filename must end with .png")
 
-        api_key = config.llm.image.api_key if hasattr(config.llm, 'image') and hasattr(config.llm.image, 'api_key') else None
+        image_settings = config.llm.get("image")
+        api_key = image_settings.api_key if image_settings and hasattr(image_settings, "api_key") else None
         if not api_key or api_key == "YOUR_CLIPDROP_API_KEY":
             return ToolResult(error="Clipdrop API key not found in config.toml under [llm.image]")
 
