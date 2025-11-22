@@ -114,9 +114,66 @@ app.use((err, req, res, next) => {
 // ========================
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`\n🚀 Server is running on port ${PORT}`);
   console.log(`🌐 URL: http://localhost:${PORT}`);
   console.log(`🔗 Client: ${process.env.CLIENT_URL || "http://localhost:5173"}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || "development"}\n`);
+});
+
+// ========================
+// 6. WEBSOCKET PROXY
+// ========================
+import { WebSocketServer } from 'ws';
+import WebSocket from 'ws';
+
+const wss = new WebSocketServer({ server, path: '/ws/generate' });
+
+wss.on('connection', (clientWs) => {
+  console.log('🔌 Client connected to /ws/generate');
+
+  // Connect to Backend
+  const backendWs = new WebSocket('ws://127.0.0.1:8000/generate');
+
+  backendWs.on('open', () => {
+    console.log('✅ Connected to Backend');
+  });
+
+  backendWs.on('message', (data) => {
+    // Forward from Backend to Client
+    if (clientWs.readyState === WebSocket.OPEN) {
+      clientWs.send(data.toString());
+    }
+  });
+
+  backendWs.on('close', () => {
+    console.log('❌ Backend connection closed');
+    clientWs.close();
+  });
+
+  backendWs.on('error', (err) => {
+    console.error('🔥 Backend WebSocket error:', err);
+    clientWs.close();
+  });
+
+  // Forward from Client to Backend
+  clientWs.on('message', (message) => {
+    const msgStr = message.toString();
+    console.log('📩 Received from client:', msgStr);
+    
+    if (backendWs.readyState === WebSocket.OPEN) {
+      backendWs.send(msgStr);
+    } else {
+      backendWs.once('open', () => {
+        backendWs.send(msgStr);
+      });
+    }
+  });
+
+  clientWs.on('close', () => {
+    console.log('🔌 Client disconnected');
+    if (backendWs.readyState === WebSocket.OPEN) {
+      backendWs.close();
+    }
+  });
 });

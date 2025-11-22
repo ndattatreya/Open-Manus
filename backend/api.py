@@ -1,14 +1,27 @@
 import sys
 import asyncio
-from fastapi import FastAPI, WebSocket
+from pathlib import Path
+from fastapi import FastAPI, WebSocket, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from app.agent.manus import Manus
-from app.logger import logger   # Loguru logger
+from app.logger import logger
+from app.config import config
 
 app = FastAPI()
 
+# Add CORS middleware to allow requests from frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # ---- Capture print/stdout -----
 class StdoutInterceptor:
-    def _init_(self, queue: asyncio.Queue):
+    def __init__(self, queue: asyncio.Queue):
         self.queue = queue
         self._orig_stdout = sys.stdout
 
@@ -103,3 +116,22 @@ async def websocket_generate(ws: WebSocket):
             pass
 
         await ws.close()
+
+@app.get("/files")
+async def list_files():
+    """List all files in the workspace directory."""
+    files = []
+    workspace = config.workspace_root
+    if workspace.exists():
+        for file in workspace.iterdir():
+            if file.is_file() and not file.name.startswith('.'):
+                files.append(file.name)
+    return {"files": sorted(files)}
+
+@app.get("/files/{filename}")
+async def get_file(filename: str):
+    """Read and return the content of a specific file."""
+    file_path = config.workspace_root / filename
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)
