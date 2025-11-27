@@ -21,6 +21,7 @@ import {
   Code,
   Download
 } from 'lucide-react';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 interface SandboxPageProps {
   autoRun?: boolean;
@@ -421,7 +422,7 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#09090b] text-foreground font-sans selection:bg-primary/20">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#09090b] text-foreground font-sans selection:bg-primary/20">
       {/* Header */}
       <div className="px-6 py-4 border-b border-border/40 flex justify-between items-center bg-background/80 backdrop-blur-md sticky top-0 z-20">
         <div className="flex items-center gap-3">
@@ -446,270 +447,280 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Chat Area */}
-        <div className={`flex-1 flex flex-col transition-all duration-300 ${showCodePanel ? 'w-1/2 border-r border-border/40' : 'w-full'}`}>
-          <div className="flex-1 overflow-y-auto p-4 sm:p-8 scroll-smooth">
-            <div className="max-w-5xl mx-auto space-y-8">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div className={`flex gap-4 max-w-full md:max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+        <PanelGroup direction="horizontal" className="h-full w-full">
+          {/* Chat Area */}
+          <Panel defaultSize={50} minSize={20}>
+            <div className="h-full flex flex-col">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-8 scroll-smooth">
+                <div className="max-w-5xl mx-auto space-y-8">
+                  {messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div className={`flex gap-4 max-w-full md:max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
 
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-zinc-800 text-zinc-400'
-                      }`}>
-                      {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                    </div>
-
-                    <div className={`flex flex-col gap-2 min-w-0 ${msg.role === 'user' ? 'items-end' : 'items-start w-full'}`}>
-
-                      {msg.role === 'user' && (
-                        <div className="bg-primary text-primary-foreground px-5 py-3 rounded-2xl rounded-tr-sm shadow-md">
-                          <p className="text-sm leading-relaxed">{msg.content}</p>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-zinc-800 text-zinc-400'
+                          }`}>
+                          {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
                         </div>
-                      )}
 
-                      {msg.role === 'bot' && (
-                        <div className="flex flex-col gap-3 w-full">
-                          {/* Text Content (e.g. Questions) */}
-                          {msg.content && (
-                            <div className="bg-zinc-800/50 text-foreground px-5 py-3 rounded-2xl rounded-tl-sm shadow-sm border border-border/50">
+                        <div className={`flex flex-col gap-2 min-w-0 ${msg.role === 'user' ? 'items-end' : 'items-start w-full'}`}>
+
+                          {msg.role === 'user' && (
+                            <div className="bg-primary text-primary-foreground px-5 py-3 rounded-2xl rounded-tr-sm shadow-md">
                               <p className="text-sm leading-relaxed">{msg.content}</p>
                             </div>
                           )}
 
-                          {msg.logs?.length === 0 && isGenerating && !msg.content && (
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse px-1">
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              <span className="font-medium">Manus is thinking...</span>
+                          {msg.role === 'bot' && (
+                            <div className="flex flex-col gap-3 w-full">
+                              {/* Text Content (e.g. Questions) */}
+                              {msg.content && (
+                                <div className="bg-zinc-800/50 text-foreground px-5 py-3 rounded-2xl rounded-tl-sm shadow-sm border border-border/50">
+                                  <p className="text-sm leading-relaxed">{msg.content}</p>
+                                </div>
+                              )}
+
+                              {msg.logs?.length === 0 && isGenerating && !msg.content && (
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse px-1">
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  <span className="font-medium">Manus is thinking...</span>
+                                </div>
+                              )}
+
+                              {msg.logs?.map((log) => (
+                                <div key={log.id} className="group border border-border/50 rounded-xl bg-card/50 overflow-hidden transition-all duration-200 hover:border-border/80 hover:shadow-sm">
+                                  <div
+                                    onClick={() => toggleLogSection(msg.id, log.id)}
+                                    className="flex items-center justify-between p-3.5 cursor-pointer hover:bg-muted/30 active:bg-muted/50 transition-colors select-none"
+                                  >
+                                    <div className="flex items-center gap-3 overflow-hidden">
+                                      {log.type === 'thought' && <Cpu className="w-4 h-4 text-indigo-400 flex-shrink-0" />}
+                                      {log.type === 'tool' && <Wrench className="w-4 h-4 text-amber-400 flex-shrink-0" />}
+                                      {log.type === 'error' && <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />}
+                                      {log.type === 'info' && <Info className="w-4 h-4 text-blue-400 flex-shrink-0" />}
+
+                                      <span className="text-sm font-medium text-foreground/90 truncate">
+                                        {log.title}
+                                      </span>
+                                    </div>
+                                    <div className="text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
+                                      {log.isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                    </div>
+                                  </div>
+
+                                  {log.isOpen && (
+                                    <div className="p-4 pt-0 animate-in slide-in-from-top-1 duration-200">
+                                      <div className="pt-3 border-t border-border/40">
+                                        <div className={`text-sm font-mono text-muted-foreground leading-relaxed whitespace-pre-wrap break-words ${log.type === 'thought' ? '' : 'overflow-x-auto'
+                                          }`}>
+                                          {log.content.join('\n')}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
                             </div>
                           )}
 
-                          {msg.logs?.map((log) => (
-                            <div key={log.id} className="group border border-border/50 rounded-xl bg-card/50 overflow-hidden transition-all duration-200 hover:border-border/80 hover:shadow-sm">
-                              <div
-                                onClick={() => toggleLogSection(msg.id, log.id)}
-                                className="flex items-center justify-between p-3.5 cursor-pointer hover:bg-muted/30 active:bg-muted/50 transition-colors select-none"
-                              >
-                                <div className="flex items-center gap-3 overflow-hidden">
-                                  {log.type === 'thought' && <Cpu className="w-4 h-4 text-indigo-400 flex-shrink-0" />}
-                                  {log.type === 'tool' && <Wrench className="w-4 h-4 text-amber-400 flex-shrink-0" />}
-                                  {log.type === 'error' && <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />}
-                                  {log.type === 'info' && <Info className="w-4 h-4 text-blue-400 flex-shrink-0" />}
-
-                                  <span className="text-sm font-medium text-foreground/90 truncate">
-                                    {log.title}
-                                  </span>
-                                </div>
-                                <div className="text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
-                                  {log.isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                                </div>
-                              </div>
-
-                              {log.isOpen && (
-                                <div className="p-4 pt-0 animate-in slide-in-from-top-1 duration-200">
-                                  <div className="pt-3 border-t border-border/40">
-                                    <div className={`text-sm font-mono text-muted-foreground leading-relaxed whitespace-pre-wrap break-words ${log.type === 'thought' ? '' : 'overflow-x-auto'
-                                      }`}>
-                                      {log.content.join('\n')}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          ))}
+                          <span className="text-[10px] text-muted-foreground/40 px-1 font-medium">
+                            {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </div>
-                      )}
-
-                      <span className="text-[10px] text-muted-foreground/40 px-1 font-medium">
-                        {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
+                      </div>
                     </div>
-                  </div>
+                  ))}
+                  <div ref={messagesEndRef} />
                 </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-          </div>
+              </div>
 
-          {/* Input Area */}
-          <div className="p-6 border-t border-border/40 bg-background/80 backdrop-blur-md">
-            <div className="max-w-3xl mx-auto flex gap-3">
-              <Input
-                value={prompt}
-                onChange={(e) => {
-                  setPrompt(e.target.value);
-                  localStorage.setItem('navaSandboxPrompt', e.target.value);
-                }}
-                placeholder={isWaitingForInput ? (inputPrompt || "Manus is asking for input...") : "Describe your task..."}
-                className={`flex-1 bg-muted/50 border-transparent focus:bg-background focus:border-primary/20 transition-all shadow-inner ${isWaitingForInput ? 'border-primary/50 ring-1 ring-primary/20' : ''
-                  }`}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (!isGenerating || isWaitingForInput)) handleSend();
-                }}
-                disabled={isGenerating && !isWaitingForInput}
-                autoFocus={isWaitingForInput}
-              />
-              <Button
-                onClick={handleSend}
-                disabled={isGenerating && !isWaitingForInput}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-primary/20 transition-all px-6"
-              >
-                {isGenerating && !isWaitingForInput ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : isWaitingForInput ? (
-                  <MessageSquare className="w-4 h-4 fill-current" />
-                ) : (
-                  <Play className="w-4 h-4 fill-current" />
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Code Panel (Right Side) */}
-        {showCodePanel && (
-          <div className="w-1/2 flex flex-col bg-[#1e1e1e] border-l border-border/40 animate-in slide-in-from-right-10 duration-300 min-w-0">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-2 bg-[#252526] border-b border-[#333] flex-shrink-0">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="flex items-center gap-2 text-sm text-gray-300">
-                  <FileCode className="w-4 h-4" />
-                  <span>Generated Files</span>
-                </div>
-                {activeFile && (isHtmlFile(activeFile) || isReactFile(activeFile)) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={async () => {
-                      const newPreviewState = !isHtmlPreview;
-                      setIsHtmlPreview(newPreviewState);
-
-                      // If switching TO preview mode and it's a React file, we need to generate the preview content
-                      if (newPreviewState && isReactFile(activeFile!) && activeFile) {
-                        try {
-                          const res = await fetch(`http://localhost:8000/files/${activeFile}`);
-                          const code = await res.text();
-
-                          let cssContent = '';
-                          try {
-                            const cssRes = await fetch(`http://localhost:8000/files/index.css`);
-                            if (cssRes.ok) cssContent = await cssRes.text();
-                          } catch (e) { /* ignore */ }
-
-                          setFileContent(getReactPreviewContent(code, cssContent));
-                        } catch (e) {
-                          console.error("Error generating preview", e);
-                        }
-                      } else if (!newPreviewState && activeFile) {
-                        // Switching back to code view, fetch raw content
-                        const res = await fetch(`http://localhost:8000/files/${activeFile}`);
-                        const content = await res.text();
-                        setFileContent(content);
-                      }
+              {/* Input Area */}
+              <div className="p-6 border-t border-border/40 bg-background/80 backdrop-blur-md">
+                <div className="max-w-3xl mx-auto flex gap-3">
+                  <Input
+                    value={prompt}
+                    onChange={(e) => {
+                      setPrompt(e.target.value);
+                      localStorage.setItem('navaSandboxPrompt', e.target.value);
                     }}
-                    className="h-7 px-2 hover:bg-[#333] text-xs text-gray-300 flex items-center gap-1"
-                    title={isHtmlPreview ? 'View Code' : 'Preview'}
+                    placeholder={isWaitingForInput ? (inputPrompt || "Manus is asking for input...") : "Describe your task..."}
+                    className={`flex-1 bg-muted/50 border-transparent focus:bg-background focus:border-primary/20 transition-all shadow-inner ${isWaitingForInput ? 'border-primary/50 ring-1 ring-primary/20' : ''
+                      }`}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (!isGenerating || isWaitingForInput)) handleSend();
+                    }}
+                    disabled={isGenerating && !isWaitingForInput}
+                    autoFocus={isWaitingForInput}
+                  />
+                  <Button
+                    onClick={handleSend}
+                    disabled={isGenerating && !isWaitingForInput}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-primary/20 transition-all px-6"
                   >
-                    {isHtmlPreview ? (
-                      <>
-                        <Code className="w-3 h-3" />
-                        <span>Code</span>
-                      </>
+                    {isGenerating && !isWaitingForInput ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : isWaitingForInput ? (
+                      <MessageSquare className="w-4 h-4 fill-current" />
                     ) : (
-                      <>
-                        <Eye className="w-3 h-3" />
-                        <span>Preview</span>
-                      </>
+                      <Play className="w-4 h-4 fill-current" />
                     )}
                   </Button>
-                )}
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowCodePanel(false)}
-                className="h-6 w-6 p-0 hover:bg-[#333] flex-shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-hidden min-h-0 min-w-0">
-              {activeFile ? (
-                <>
-                  {isImageFile(activeFile) ? (
-                    <div className="h-full w-full overflow-auto p-4 flex items-center justify-center bg-[#1a1a1a]">
-                      <img
-                        src={`http://localhost:8000/files/${activeFile}`}
-                        alt={activeFile}
-                        className="max-w-full max-h-full object-contain"
-                      />
-                    </div>
-                  ) : (isHtmlFile(activeFile) || isReactFile(activeFile)) && isHtmlPreview ? (
-                    <div className="h-full w-full overflow-auto bg-white">
-                      <iframe
-                        srcDoc={fileContent}
-                        className="w-full h-full border-none"
-                        title="Preview"
-                        sandbox="allow-scripts allow-same-origin"
-                      />
-                    </div>
-                  ) : isPptxFile(activeFile) ? (
-                    <div className="h-full w-full flex flex-col items-center justify-center gap-4 p-6 text-center">
-                      <div className="p-4 bg-primary/10 rounded-full">
-                        <FileCode className="w-12 h-12 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-medium text-foreground">PowerPoint Presentation</h3>
-                        <p className="text-sm text-muted-foreground mt-1">This file cannot be previewed directly.</p>
-                      </div>
-                      <Button
-                        onClick={() => window.open(`http://localhost:8000/files/${activeFile}`, '_blank')}
-                        className="gap-2"
-                      >
-                        <Download className="w-4 h-4" />
-                        Download File
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="h-full w-full overflow-auto min-w-0">
-                      <pre className="p-4 text-sm font-mono text-gray-300 leading-relaxed whitespace-pre-wrap break-words min-w-0">
-                        {fileContent}
-                      </pre>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="flex items-center justify-center h-full text-gray-500 text-sm">
-                  Select a file to view content
                 </div>
-              )}
+              </div>
             </div>
+          </Panel>
 
-            {/* Tabs (Bottom) */}
-            <div className="flex items-center gap-1 px-2 py-1 bg-[#252526] border-t border-[#333] overflow-x-auto flex-shrink-0">
-              {files.map(file => (
-                <button
-                  key={file}
-                  onClick={() => handleFileClick(file)}
-                  className={`px-3 py-1.5 text-xs rounded-t-md transition-colors flex items-center gap-2 whitespace-nowrap ${activeFile === file
-                    ? 'bg-[#1e1e1e] text-white border-t-2 border-blue-500'
-                    : 'text-gray-400 hover:bg-[#333] hover:text-gray-200'
-                    }`}
-                >
-                  <FileCode className="w-3 h-3" />
-                  {file}
-                </button>
-              ))}
-              {files.length === 0 && (
-                <span className="text-xs text-gray-500 px-2 py-1">No files generated</span>
-              )}
-            </div>
-          </div>
-        )}
+          {/* Code Panel (Right Side) */}
+          {showCodePanel && (
+            <>
+              <PanelResizeHandle className="w-1 bg-border/40 hover:bg-primary/50 transition-colors cursor-col-resize" />
+              <Panel defaultSize={50} minSize={20}>
+                <div className="h-full flex flex-col bg-[#1e1e1e] border-l border-border/40 min-w-0">
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-4 py-2 bg-[#252526] border-b border-[#333] flex-shrink-0">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 text-sm text-gray-300">
+                        <FileCode className="w-4 h-4" />
+                        <span>Generated Files</span>
+                      </div>
+                      {activeFile && (isHtmlFile(activeFile) || isReactFile(activeFile)) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={async () => {
+                            const newPreviewState = !isHtmlPreview;
+                            setIsHtmlPreview(newPreviewState);
+
+                            // If switching TO preview mode and it's a React file, we need to generate the preview content
+                            if (newPreviewState && isReactFile(activeFile!) && activeFile) {
+                              try {
+                                const res = await fetch(`http://localhost:8000/files/${activeFile}`);
+                                const code = await res.text();
+
+                                let cssContent = '';
+                                try {
+                                  const cssRes = await fetch(`http://localhost:8000/files/index.css`);
+                                  if (cssRes.ok) cssContent = await cssRes.text();
+                                } catch (e) { /* ignore */ }
+
+                                setFileContent(getReactPreviewContent(code, cssContent));
+                              } catch (e) {
+                                console.error("Error generating preview", e);
+                              }
+                            } else if (!newPreviewState && activeFile) {
+                              // Switching back to code view, fetch raw content
+                              const res = await fetch(`http://localhost:8000/files/${activeFile}`);
+                              const content = await res.text();
+                              setFileContent(content);
+                            }
+                          }}
+                          className="h-7 px-2 hover:bg-[#333] text-xs text-gray-300 flex items-center gap-1"
+                          title={isHtmlPreview ? 'View Code' : 'Preview'}
+                        >
+                          {isHtmlPreview ? (
+                            <>
+                              <Code className="w-3 h-3" />
+                              <span>Code</span>
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-3 h-3" />
+                              <span>Preview</span>
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowCodePanel(false)}
+                      className="h-6 w-6 p-0 hover:bg-[#333] flex-shrink-0"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-1 overflow-hidden min-h-0 min-w-0">
+                    {activeFile ? (
+                      <>
+                        {isImageFile(activeFile) ? (
+                          <div className="h-full w-full overflow-auto p-4 flex items-center justify-center bg-[#1a1a1a]">
+                            <img
+                              src={`http://localhost:8000/files/${activeFile}`}
+                              alt={activeFile}
+                              className="max-w-full max-h-full object-contain"
+                            />
+                          </div>
+                        ) : (isHtmlFile(activeFile) || isReactFile(activeFile)) && isHtmlPreview ? (
+                          <div className="h-full w-full overflow-auto bg-white">
+                            <iframe
+                              srcDoc={fileContent}
+                              className="w-full h-full border-none"
+                              title="Preview"
+                              sandbox="allow-scripts allow-same-origin"
+                            />
+                          </div>
+                        ) : isPptxFile(activeFile) ? (
+                          <div className="h-full w-full flex flex-col items-center justify-center gap-4 p-6 text-center">
+                            <div className="p-4 bg-primary/10 rounded-full">
+                              <FileCode className="w-12 h-12 text-primary" />
+                            </div>
+                            <div>
+                              <h3 className="text-lg font-medium text-foreground">PowerPoint Presentation</h3>
+                              <p className="text-sm text-muted-foreground mt-1">This file cannot be previewed directly.</p>
+                            </div>
+                            <Button
+                              onClick={() => window.open(`http://localhost:8000/files/${activeFile}`, '_blank')}
+                              className="gap-2"
+                            >
+                              <Download className="w-4 h-4" />
+                              Download File
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="h-full w-full overflow-auto min-w-0">
+                            <pre className="p-4 text-sm font-mono text-gray-300 leading-relaxed whitespace-pre-wrap break-words min-w-0">
+                              {fileContent}
+                            </pre>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+                        Select a file to view content
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tabs (Bottom) */}
+                  <div className="flex items-center gap-1 px-2 py-1 bg-[#252526] border-t border-[#333] overflow-x-auto flex-shrink-0">
+                    {files.map(file => (
+                      <button
+                        key={file}
+                        onClick={() => handleFileClick(file)}
+                        title={file}
+                        className={`px-3 py-1.5 text-xs rounded-t-md transition-colors flex items-center gap-2 max-w-[120px] ${activeFile === file
+                          ? 'bg-[#1e1e1e] text-white border-t-2 border-blue-500'
+                          : 'text-gray-400 hover:bg-[#333] hover:text-gray-200'
+                          }`}
+                      >
+                        <FileCode className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">{file}</span>
+                      </button>
+                    ))}
+                    {files.length === 0 && (
+                      <span className="text-xs text-gray-500 px-2 py-1">No files generated</span>
+                    )}
+                  </div>
+                </div>
+              </Panel>
+            </>
+          )}
+        </PanelGroup>
       </div>
     </div>
   );
