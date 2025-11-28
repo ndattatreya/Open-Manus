@@ -1,11 +1,10 @@
 from typing import Any, Callable, Optional
 
-from app.agent.browser import BrowserContextHelper
 from app.agent.toolcall import ToolCallAgent
 from app.config import config
 from app.prompt.manus import NEXT_STEP_PROMPT, SYSTEM_PROMPT
 from app.tool import Terminate, ToolCollection
-from app.tool.browser_use_tool import BrowserUseTool
+from app.tool.tavily_search import TavilyTool
 from app.tool.image_generation import ImageGenerationTool
 from app.tool.pptx_generation import PptxGenerationTool
 from app.tool.python_execute import PythonExecute
@@ -33,7 +32,7 @@ class Manus(ToolCallAgent):
     available_tools: ToolCollection = Field(
         default_factory=lambda: ToolCollection(
             PythonExecute(),
-            BrowserUseTool(),
+            TavilyTool(),
             StrReplaceEditor(),
             ImageGenerationTool(),
             PptxGenerationTool(),
@@ -43,14 +42,7 @@ class Manus(ToolCallAgent):
 
     special_tool_names: list[str] = Field(default_factory=lambda: [Terminate().name])
 
-    browser_context_helper: Optional[BrowserContextHelper] = None
-
     _input_callback: Optional[Callable[[str], Any]] = PrivateAttr(default=None)
-
-    @model_validator(mode="after")
-    def initialize_helper(self) -> "Manus":
-        self.browser_context_helper = BrowserContextHelper(self)
-        return self
 
     def set_input_callback(self, callback: Callable[[str], Any]):
         """Set the callback for user input and add the tool."""
@@ -66,28 +58,8 @@ class Manus(ToolCallAgent):
 
     async def think(self) -> bool:
         """Process current state and decide next actions with appropriate context."""
-        original_prompt = self.next_step_prompt
-        recent_messages = self.memory.messages[-3:] if self.memory.messages else []
-        browser_in_use = any(
-            tc.function.name == BrowserUseTool().name
-            for msg in recent_messages
-            if msg.tool_calls
-            for tc in msg.tool_calls
-        )
-
-        if browser_in_use:
-            self.next_step_prompt = (
-                await self.browser_context_helper.format_next_step_prompt()
-            )
-
-        result = await super().think()
-
-        # Restore original prompt
-        self.next_step_prompt = original_prompt
-
-        return result
+        return await super().think()
 
     async def cleanup(self):
         """Clean up Manus agent resources."""
-        if self.browser_context_helper:
-            await self.browser_context_helper.cleanup_browser()
+        pass

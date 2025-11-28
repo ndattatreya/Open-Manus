@@ -1,6 +1,7 @@
 """File operation interfaces and implementations for local and sandbox environments."""
 
 import asyncio
+import html
 from pathlib import Path
 from typing import Optional, Protocol, Tuple, Union, runtime_checkable
 
@@ -54,6 +55,8 @@ class LocalFileOperator(FileOperator):
     async def write_file(self, path: PathLike, content: str) -> None:
         """Write content to a local file."""
         try:
+            # Sanitize content by unescaping HTML entities (fixes common LLM generation artifacts)
+            content = html.unescape(content)
             Path(path).write_text(content, encoding=self.encoding)
         except Exception as e:
             raise ToolError(f"Failed to write to {path}: {str(e)}") from None
@@ -116,6 +119,8 @@ class SandboxFileOperator(FileOperator):
         """Write content to a file in sandbox."""
         await self._ensure_sandbox_initialized()
         try:
+            # Sanitize content by unescaping HTML entities
+            content = html.unescape(content)
             await self.sandbox_client.write_file(str(path), content)
         except Exception as e:
             raise ToolError(f"Failed to write to {path} in sandbox: {str(e)}") from None

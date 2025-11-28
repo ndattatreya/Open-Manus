@@ -219,6 +219,21 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
           return prev.map((m, index) => {
             // Only append to the last bot message, not the original botMsgId
             if (index === lastBotIndex && m.role === 'bot') {
+              // Check if this is a "Manus's thoughts" message
+              if (msg.includes("✨ Manus's thoughts:")) {
+                const thoughtContent = msg.replace(/.*✨ Manus's thoughts:\s*/, '').trim();
+
+                // Heuristic: If it's a long thought or has markdown headers, treat it as the main response
+                if (thoughtContent.length > 150 || thoughtContent.includes('# ')) {
+                  return {
+                    ...m,
+                    content: thoughtContent // Update main content
+                    // We can optionally STILL add it to logs if we want, but user wants it as "output"
+                    // Let's NOT add it to logs to avoid duplication if we promote it
+                  };
+                }
+              }
+
               const currentLogs = m.logs || [];
               const lastLog = currentLogs[currentLogs.length - 1];
               const msgType = getLogType(msg);
@@ -475,13 +490,6 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
 
                           {msg.role === 'bot' && (
                             <div className="flex flex-col gap-3 w-full">
-                              {/* Text Content (e.g. Questions) */}
-                              {msg.content && (
-                                <div className="bg-zinc-800/50 text-foreground px-5 py-3 rounded-2xl rounded-tl-sm shadow-sm border border-border/50">
-                                  <p className="text-sm leading-relaxed">{msg.content}</p>
-                                </div>
-                              )}
-
                               {msg.logs?.length === 0 && isGenerating && !msg.content && (
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse px-1">
                                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -521,7 +529,15 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
                                     </div>
                                   )}
                                 </div>
-                              ))}
+                              ))
+                              }
+
+                              {/* Text Content (e.g. Questions or Final Thoughts) - Rendered LAST */}
+                              {msg.content && (
+                                <div className="bg-zinc-800/50 text-foreground px-5 py-3 rounded-2xl rounded-tl-sm shadow-sm border border-border/50">
+                                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                                </div>
+                              )}
                             </div>
                           )}
 
