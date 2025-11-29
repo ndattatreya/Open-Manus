@@ -7,6 +7,7 @@ from app.tool import Terminate, ToolCollection
 from app.tool.tavily_search import TavilyTool
 from app.tool.image_generation import ImageGenerationTool
 from app.tool.pptx_generation import PptxGenerationTool
+from app.tool.document_generation import UniversalFileGenerator
 from app.tool.python_execute import PythonExecute
 from app.tool.str_replace_editor import StrReplaceEditor
 from app.tool.user_input import UserInputTool
@@ -36,6 +37,7 @@ class Manus(ToolCallAgent):
             StrReplaceEditor(),
             ImageGenerationTool(),
             PptxGenerationTool(),
+            UniversalFileGenerator(),
             Terminate(),
         )
     )

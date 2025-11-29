@@ -81,6 +81,15 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Helper functions defined early to avoid hoisting issues
+  const isPptxFile = (filename: string) => filename.toLowerCase().endsWith('.pptx');
+  const isPdfFile = (filename: string) => filename.toLowerCase().endsWith('.pdf');
+  const isDocxFile = (filename: string) => filename.toLowerCase().endsWith('.docx');
+  const isBinaryFile = (filename: string) => /\.(xlsx|xls|zip|tar|gz|7z|exe|bin)$/i.test(filename);
+  const isImageFile = (filename: string) => /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(filename);
+  const isHtmlFile = (filename: string) => /\.html?$/i.test(filename);
+  const isReactFile = (filename: string) => /\.(jsx|tsx)$/i.test(filename);
+
   const getLogType = (line: string): LogType => {
     if (line.includes('thoughts:') || line.includes('✨')) return 'thought';
     if (
@@ -337,7 +346,7 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
     setActiveFile(filename);
     setIsHtmlPreview(false); // Reset preview mode when switching files
 
-    if (isPptxFile(filename)) {
+    if (isPptxFile(filename) || isBinaryFile(filename)) {
       setFileContent(''); // Clear content for binary files
       return;
     }
@@ -368,21 +377,6 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
     }
   };
 
-  const isImageFile = (filename: string) => {
-    return /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(filename);
-  };
-
-  const isHtmlFile = (filename: string) => {
-    return /\.html?$/i.test(filename);
-  };
-
-  const isPptxFile = (filename: string) => {
-    return /\.pptx$/i.test(filename);
-  };
-
-  const isReactFile = (filename: string) => {
-    return /\.(jsx|tsx)$/i.test(filename);
-  };
 
   const getReactPreviewContent = (code: string, css: string = '') => {
     return `
@@ -680,13 +674,17 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
                               sandbox="allow-scripts allow-same-origin"
                             />
                           </div>
-                        ) : isPptxFile(activeFile) ? (
+                        ) : isPptxFile(activeFile) || isDocxFile(activeFile) || isBinaryFile(activeFile) ? (
                           <div className="h-full w-full flex flex-col items-center justify-center gap-4 p-6 text-center">
                             <div className="p-4 bg-primary/10 rounded-full">
                               <FileCode className="w-12 h-12 text-primary" />
                             </div>
                             <div>
-                              <h3 className="text-lg font-medium text-foreground">PowerPoint Presentation</h3>
+                              <h3 className="text-lg font-medium text-foreground">
+                                {isPptxFile(activeFile) ? 'PowerPoint Presentation' :
+                                  isDocxFile(activeFile) ? 'Word Document' :
+                                    'Binary File'}
+                              </h3>
                               <p className="text-sm text-muted-foreground mt-1">This file cannot be previewed directly.</p>
                             </div>
                             <Button
@@ -696,6 +694,14 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
                               <Download className="w-4 h-4" />
                               Download File
                             </Button>
+                          </div>
+                        ) : isPdfFile(activeFile) ? (
+                          <div className="h-full w-full overflow-hidden bg-zinc-900 flex flex-col">
+                            <iframe
+                              src={`http://localhost:8000/files/${activeFile}`}
+                              className="w-full h-full border-none"
+                              title="PDF Preview"
+                            />
                           </div>
                         ) : (
                           <div className="h-full w-full overflow-auto min-w-0">
