@@ -25,6 +25,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 interface SandboxPageProps {
   autoRun?: boolean;
+  initialPrompt?: string;
 }
 
 type LogType = 'thought' | 'tool' | 'error' | 'info';
@@ -45,8 +46,15 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => {
-  const [prompt, setPrompt] = useState('');
+interface TerminalLog {
+  id: string;
+  line: string;
+  level: string;
+  timestamp: string;
+}
+
+export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false, initialPrompt = '' }) => {
+  const [prompt, setPrompt] = useState(initialPrompt);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDone, setIsDone] = useState(false);
@@ -62,6 +70,11 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
   const [isHtmlPreview, setIsHtmlPreview] = useState(false);
+
+  // Terminal/Log View State
+  const [terminalLogs, setTerminalLogs] = useState<TerminalLog[]>([]);
+  const [showTerminal, setShowTerminal] = useState(true);
+  const terminalEndRef = useRef<HTMLDivElement>(null);
 
   // Load prompt if saved
   useEffect(() => {
@@ -81,14 +94,10 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Helper functions defined early to avoid hoisting issues
-  const isPptxFile = (filename: string) => filename.toLowerCase().endsWith('.pptx');
-  const isPdfFile = (filename: string) => filename.toLowerCase().endsWith('.pdf');
-  const isDocxFile = (filename: string) => filename.toLowerCase().endsWith('.docx');
-  const isBinaryFile = (filename: string) => /\.(xlsx|xls|zip|tar|gz|7z|exe|bin)$/i.test(filename);
-  const isImageFile = (filename: string) => /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(filename);
-  const isHtmlFile = (filename: string) => /\.html?$/i.test(filename);
-  const isReactFile = (filename: string) => /\.(jsx|tsx)$/i.test(filename);
+  // Auto-scroll terminal to bottom
+  useEffect(() => {
+    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [terminalLogs]);
 
   const getLogType = (line: string): LogType => {
     if (line.includes('thoughts:') || line.includes('✨')) return 'thought';
@@ -104,6 +113,42 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
     ) return 'tool';
     if (line.includes('Error') || line.includes('error') || line.includes('Snag') || line.includes('🚨') || line.includes('⚠️')) return 'error';
     return 'info';
+  };
+
+  const parseLogLine = (line: string): { level: string; content: string; timestamp: string } => {
+    // Parse loguru format: "timestamp | LEVEL | source - message"
+    const logPattern = /(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d+)\s*\|\s*(\w+)\s*\|(.+)/;
+    const match = line.match(logPattern);
+    
+    if (match) {
+      return {
+        timestamp: match[1],
+        level: match[2],
+        content: match[3].trim()
+      };
+    }
+    
+    return {
+      timestamp: new Date().toLocaleTimeString(),
+      level: 'INFO',
+      content: line
+    };
+  };
+
+  const getLevelColor = (level: string): string => {
+    switch (level.toUpperCase()) {
+      case 'ERROR':
+      case 'CRITICAL':
+        return 'text-red-400';
+      case 'WARNING':
+        return 'text-yellow-400';
+      case 'DEBUG':
+        return 'text-blue-400';
+      case 'INFO':
+        return 'text-green-400';
+      default:
+        return 'text-white';
+    }
   };
 
   const handleSend = () => {
@@ -218,27 +263,40 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
           setIsDone(true);
           ws.close();
           wsRef.current = null;
+          
+          // Fetch latest logs from backend and add to terminal
+          fetchLatestLogs();
+          // Load output files
+          handleShowCode();
+          // Save to history after a short delay to ensure files are loaded
+          setTimeout(() => saveSessionToHistory(), 500);
           return;
         }
 
+        // Add to terminal logs
+        const logParsed = parseLogLine(msg);
+        const terminalLog: TerminalLog = {
+          id: crypto.randomUUID(),
+          line: msg,
+          level: logParsed.level,
+          timestamp: logParsed.timestamp
+        };
+        setTerminalLogs(prev => [...prev, terminalLog]);
+
+        // Also add to bot message for conversation view
         setMessages(prev => {
-          // Find the last bot message to append logs to
           const lastBotIndex = prev.length - 1 - [...prev].reverse().findIndex(m => m.role === 'bot');
 
           return prev.map((m, index) => {
-            // Only append to the last bot message, not the original botMsgId
             if (index === lastBotIndex && m.role === 'bot') {
               // Check if this is a "Manus's thoughts" message
               if (msg.includes("✨ Manus's thoughts:")) {
                 const thoughtContent = msg.replace(/.*✨ Manus's thoughts:\s*/, '').trim();
 
-                // Heuristic: If it's a long thought or has markdown headers, treat it as the main response
                 if (thoughtContent.length > 150 || thoughtContent.includes('# ')) {
                   return {
                     ...m,
-                    content: thoughtContent // Update main content
-                    // We can optionally STILL add it to logs if we want, but user wants it as "output"
-                    // Let's NOT add it to logs to avoid duplication if we promote it
+                    content: thoughtContent
                   };
                 }
               }
@@ -247,7 +305,6 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
               const lastLog = currentLogs[currentLogs.length - 1];
               const msgType = getLogType(msg);
 
-              // Grouping Logic
               let shouldAppend = false;
               if (lastLog) {
                 if (lastLog.type === 'tool' && msgType === 'tool') {
@@ -336,9 +393,95 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
         const content = await contentRes.text();
         setFileContent(content);
       }
-      setShowCodePanel(true);
     } catch (e) {
       console.error("Failed to fetch files", e);
+    }
+  };
+
+  const fetchLatestLogs = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/logs/latest');
+      const data = await res.json();
+      
+      if (data.lines && Array.isArray(data.lines)) {
+        const logs = data.lines
+          .filter((line: string) => line.trim())
+          .map((line: string) => {
+            const parsed = parseLogLine(line);
+            return {
+              id: crypto.randomUUID(),
+              line: line,
+              level: parsed.level,
+              timestamp: parsed.timestamp
+            };
+          });
+        setTerminalLogs(logs);
+      }
+    } catch (e) {
+      console.error("Failed to fetch logs", e);
+    }
+  };
+
+  const saveSessionToHistory = async () => {
+    try {
+      // Determine the prompt used for the last generation by finding the last user message
+      const lastUserMsg = [...messages].slice().reverse().find(m => m.role === 'user');
+      const promptText = (lastUserMsg && lastUserMsg.content) ? String(lastUserMsg.content) : '';
+
+      // Get all generated image files
+      const imageFiles = files.filter((file) => isImageFile(file));
+
+      // Build messages for history: include the original prompt and one message per generated image as an image URL
+      const historyMessages: any[] = [];
+      historyMessages.push({
+        id: crypto.randomUUID(),
+        content: promptText,
+        isUser: true,
+        timestamp: new Date().toISOString()
+      });
+
+      // Add a textual summary message
+      historyMessages.push({
+        id: crypto.randomUUID(),
+        content: `Generated ${imageFiles.length} output(s)`,
+        isUser: false,
+        timestamp: new Date().toISOString()
+      });
+
+      // Add image entries as separate messages containing the server URL to each image
+      imageFiles.forEach((f) => {
+        historyMessages.push({
+          id: crypto.randomUUID(),
+          content: `http://localhost:8000/files/${f}`,
+          isUser: false,
+          timestamp: new Date().toISOString()
+        });
+      });
+
+      // Build session for history
+      const newSession = {
+        id: crypto.randomUUID(),
+        title: (promptText || '').substring(0, 50) + ((promptText || '').length > 50 ? '...' : ''),
+        messages: historyMessages,
+        createdAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
+        isDraft: false,
+        generatedFiles: imageFiles
+      };
+
+      // Get existing history
+      const existingHistory = localStorage.getItem('nava-ai-chat-history');
+      const history = existingHistory ? JSON.parse(existingHistory) : [];
+
+      // Add new session to front
+      history.unshift(newSession);
+
+      // Save back to localStorage
+      localStorage.setItem('nava-ai-chat-history', JSON.stringify(history));
+
+      console.log('Session saved to history', newSession);
+    } catch (e) {
+      console.error("Failed to save session to history", e);
     }
   };
 
@@ -346,13 +489,31 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
     setActiveFile(filename);
     setIsHtmlPreview(false); // Reset preview mode when switching files
 
-    if (isPptxFile(filename) || isBinaryFile(filename)) {
+    const isBinaryDoc = (fname: string) => /\.(pdf|pptx|ppt|docx|doc|xlsx|xls|odt|zip)$/i.test(fname);
+
+    if (isBinaryDoc(filename)) {
       setFileContent(''); // Clear content for binary files
+      try {
+        const res = await fetch(`http://localhost:8000/files/${filename}`);
+        if (!res.ok) throw new Error('Failed to fetch file');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+      } catch (e) {
+        console.error('Failed to open binary file in new tab', e);
+      }
       return;
     }
 
     try {
       const res = await fetch(`http://localhost:8000/files/${filename}`);
+
+      // If it's an image, we don't need to read as text here; image is displayed via URL
+      if (isImageFile(filename)) {
+        setFileContent('');
+        return;
+      }
+
       const content = await res.text();
 
       if (isReactFile(filename)) {
@@ -377,6 +538,36 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
     }
   };
 
+  const isImageFile = (filename: string) => {
+    return /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(filename);
+  };
+
+  const isHtmlFile = (filename: string) => {
+    return /\.html?$/i.test(filename);
+  };
+
+  const isPptxFile = (filename: string) => {
+    return /\.pptx$/i.test(filename);
+  };
+
+  const isReactFile = (filename: string) => {
+    return /\.(jsx|tsx)$/i.test(filename);
+  };
+
+  const isBinaryDoc = (filename: string) => /\.(pdf|pptx|ppt|docx|doc|xlsx|xls|odt|zip)$/i.test(filename);
+
+  const openFileInNewTab = async (filename: string) => {
+    try {
+      const res = await fetch(`http://localhost:8000/files/${filename}`);
+      if (!res.ok) throw new Error('Failed to fetch file');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (e) {
+      console.error('Failed to open file', e);
+      alert('Failed to open file in new tab');
+    }
+  };
 
   const getReactPreviewContent = (code: string, css: string = '') => {
     return `
@@ -431,319 +622,208 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false }) => 
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#09090b] text-foreground font-sans selection:bg-primary/20">
+  <div className="flex-1 overflow-y-auto px-6 py-4 pt-4 bg-background text-foreground">
+    {/* Workspace Card */}
+    <div className="flex flex-col h-[90vh] rounded-2xl border border-white/10 bg-black/20 backdrop-blur-md shadow-xl overflow-hidden">
+
       {/* Header */}
-      <div className="px-6 py-4 border-b border-border/40 flex justify-between items-center bg-background/80 backdrop-blur-md sticky top-0 z-20">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <Terminal className="w-5 h-5 text-primary" />
+      <div className="px-6 py-2 flex justify-between items-center bg-card/30 backdrop-blur-xl border-b border-border">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 bg-indigo-500/10 rounded-lg">
+            <Terminal className="w-4 h-4 text-indigo-400" />
           </div>
           <div>
-            <h1 className="text-lg font-medium tracking-tight">Manus Sandbox</h1>
-            <p className="text-xs text-muted-foreground font-medium">Interactive Agent Environment</p>
+            <h1 className="text-sm font-medium text-white">Manus Sandbox</h1>
+            <p className="text-xs text-white/60 font-medium">Run agent tasks & inspect output</p>
           </div>
         </div>
-
-        {isDone && !showCodePanel && (
-          <Button
-            onClick={handleShowCode}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 transition-all"
-          >
-            <CodeIcon className="w-4 h-4 mr-2" />
-            View Code
-          </Button>
-        )}
       </div>
 
+      {/* Workspace Panels */}
       <div className="flex-1 flex overflow-hidden">
-        <PanelGroup direction="horizontal" className="h-full w-full">
-          {/* Chat Area */}
-          <Panel defaultSize={50} minSize={20}>
-            <div className="h-full flex flex-col">
-              <div className="flex-1 overflow-y-auto p-4 sm:p-8 scroll-smooth">
-                <div className="max-w-5xl mx-auto space-y-8">
-                  {messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div className={`flex gap-4 max-w-full md:max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
 
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-zinc-800 text-zinc-400'
-                          }`}>
-                          {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                        </div>
+        {/* Left - Logs & Chat */}
+        <PanelGroup direction="horizontal" className="w-full">
+          <Panel defaultSize={55} minSize={35}>
+            <div className="flex flex-col h-full">
 
-                        <div className={`flex flex-col gap-2 min-w-0 ${msg.role === 'user' ? 'items-end' : 'items-start w-full'}`}>
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+                {messages.map((msg) => (
+                  <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div className={`flex gap-3 max-w-[85%] ${msg.role === "user" && "flex-row-reverse"}`}>
 
-                          {msg.role === 'user' && (
-                            <div className="bg-primary text-primary-foreground px-5 py-3 rounded-2xl rounded-tr-sm shadow-md">
-                              <p className="text-sm leading-relaxed">{msg.content}</p>
-                            </div>
-                          )}
+                      {/* Avatar */}
+                      <div className={`w-8 h-8 flex items-center justify-center rounded-full shadow 
+                        ${msg.role === "user" ? "bg-indigo-500 text-white" : "bg-white/10 text-indigo-200"}`}>
+                        {msg.role === "user" ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+                      </div>
 
-                          {msg.role === 'bot' && (
-                            <div className="flex flex-col gap-3 w-full">
-                              {msg.logs?.length === 0 && isGenerating && !msg.content && (
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse px-1">
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                  <span className="font-medium">Manus is thinking...</span>
-                                </div>
-                              )}
+                      {/* Message Segments */}
+                      <div className="flex flex-col gap-2 w-full">
 
-                              {msg.logs?.map((log) => (
-                                <div key={log.id} className="group border border-border/50 rounded-xl bg-card/50 overflow-hidden transition-all duration-200 hover:border-border/80 hover:shadow-sm">
-                                  <div
-                                    onClick={() => toggleLogSection(msg.id, log.id)}
-                                    className="flex items-center justify-between p-3.5 cursor-pointer hover:bg-muted/30 active:bg-muted/50 transition-colors select-none"
-                                  >
-                                    <div className="flex items-center gap-3 overflow-hidden">
-                                      {log.type === 'thought' && <Cpu className="w-4 h-4 text-indigo-400 flex-shrink-0" />}
-                                      {log.type === 'tool' && <Wrench className="w-4 h-4 text-amber-400 flex-shrink-0" />}
-                                      {log.type === 'error' && <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />}
-                                      {log.type === 'info' && <Info className="w-4 h-4 text-blue-400 flex-shrink-0" />}
+                        {/* User message */}
+                        {msg.role === "user" && (
+                          <div className="bg-indigo-500/90 text-white px-4 py-3 rounded-xl shadow-md">
+                            {msg.content}
+                          </div>
+                        )}
 
-                                      <span className="text-sm font-medium text-foreground/90 truncate">
-                                        {log.title}
-                                      </span>
-                                    </div>
-                                    <div className="text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
-                                      {log.isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                                    </div>
-                                  </div>
+                        {/* Bot content */}
+                        {msg.role === "bot" && msg.content && (
+                          <div className="bg-white/10 border border-white/10 px-4 py-3 rounded-lg text-white shadow-sm">
+                            {msg.content}
+                          </div>
+                        )}
 
-                                  {log.isOpen && (
-                                    <div className="p-4 pt-0 animate-in slide-in-from-top-1 duration-200">
-                                      <div className="pt-3 border-t border-border/40">
-                                        <div className={`text-sm font-mono text-muted-foreground leading-relaxed whitespace-pre-wrap break-words ${log.type === 'thought' ? '' : 'overflow-x-auto'
-                                          }`}>
-                                          {log.content.join('\n')}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              ))
-                              }
-
-                              {/* Text Content (e.g. Questions or Final Thoughts) - Rendered LAST */}
-                              {msg.content && (
-                                <div className="bg-zinc-800/50 text-foreground px-5 py-3 rounded-2xl rounded-tl-sm shadow-sm border border-border/50">
-                                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          <span className="text-[10px] text-muted-foreground/40 px-1 font-medium">
-                            {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
+                        {/* Timestamp */}
+                        <span className="text-[10px] text-white/40">
+                          {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
                       </div>
                     </div>
-                  ))}
-                  <div ref={messagesEndRef} />
-                </div>
+                  </div>
+                ))}
+                <div ref={messagesEndRef}></div>
               </div>
 
-              {/* Input Area */}
-              <div className="p-6 border-t border-border/40 bg-background/80 backdrop-blur-md">
-                <div className="max-w-3xl mx-auto flex gap-3">
+              {/* Input Bar */}
+              <div className="px-6 py-4 bg-card/20 border-t border-border backdrop-blur-lg">
+                <div className="flex gap-3 max-w-3xl mx-auto">
                   <Input
                     value={prompt}
-                    onChange={(e) => {
-                      setPrompt(e.target.value);
-                      localStorage.setItem('navaSandboxPrompt', e.target.value);
-                    }}
-                    placeholder={isWaitingForInput ? (inputPrompt || "Manus is asking for input...") : "Describe your task..."}
-                    className={`flex-1 bg-muted/50 border-transparent focus:bg-background focus:border-primary/20 transition-all shadow-inner ${isWaitingForInput ? 'border-primary/50 ring-1 ring-primary/20' : ''
-                      }`}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (!isGenerating || isWaitingForInput)) handleSend();
-                    }}
-                    disabled={isGenerating && !isWaitingForInput}
-                    autoFocus={isWaitingForInput}
+                    onChange={(e) => { setPrompt(e.target.value); localStorage.setItem("navaSandboxPrompt", e.target.value); }}
+                    placeholder="Describe what you want to generate…"
+                    className="bg-black/20 text-white border-white/20 rounded-xl placeholder:text-white/40"
+                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
                   />
-                  <Button
-                    onClick={handleSend}
-                    disabled={isGenerating && !isWaitingForInput}
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-primary/20 transition-all px-6"
-                  >
-                    {isGenerating && !isWaitingForInput ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : isWaitingForInput ? (
-                      <MessageSquare className="w-4 h-4 fill-current" />
-                    ) : (
-                      <Play className="w-4 h-4 fill-current" />
-                    )}
+                  <Button onClick={handleSend} className="rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white">
+                    {isGenerating ? <Loader2 className="animate-spin"/> : <Play />}
                   </Button>
                 </div>
               </div>
+
             </div>
           </Panel>
 
-          {/* Code Panel (Right Side) */}
-          {showCodePanel && (
-            <>
-              <PanelResizeHandle className="w-1 bg-border/40 hover:bg-primary/50 transition-colors cursor-col-resize" />
-              <Panel defaultSize={50} minSize={20}>
-                <div className="h-full flex flex-col bg-[#1e1e1e] border-l border-border/40 min-w-0">
-                  {/* Header */}
-                  <div className="flex items-center justify-between px-4 py-2 bg-[#252526] border-b border-[#333] flex-shrink-0">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="flex items-center gap-2 text-sm text-gray-300">
-                        <FileCode className="w-4 h-4" />
-                        <span>Generated Files</span>
-                      </div>
-                      {activeFile && (isHtmlFile(activeFile) || isReactFile(activeFile)) && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={async () => {
-                            const newPreviewState = !isHtmlPreview;
-                            setIsHtmlPreview(newPreviewState);
+          {/* Output Panel */}
+          <PanelResizeHandle className="w-1 bg-white/10 hover:bg-indigo-500 cursor-col-resize" />
+          <Panel defaultSize={45} minSize={25}>
+            <div className="flex flex-col h-full border-l border-border bg-card/20 backdrop-blur-xl">
 
-                            // If switching TO preview mode and it's a React file, we need to generate the preview content
-                            if (newPreviewState && isReactFile(activeFile!) && activeFile) {
-                              try {
-                                const res = await fetch(`http://localhost:8000/files/${activeFile}`);
-                                const code = await res.text();
+              {/* Panel Header with Tabs */}
+              <div className="px-4 py-2 border-b border-border flex gap-2">
+                <button
+                  onClick={() => setShowTerminal(true)}
+                  className={`px-3 py-1.5 text-xs rounded-md transition whitespace-nowrap ${
+                    showTerminal
+                      ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/50"
+                      : "text-white/50 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  <Terminal className="w-3 h-3 inline mr-1" />
+                  Terminal
+                </button>
+                {isDone && (
+                  <button
+                    onClick={() => setShowTerminal(false)}
+                    className={`px-3 py-1.5 text-xs rounded-md transition whitespace-nowrap ${
+                      !showTerminal
+                        ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/50"
+                        : "text-white/50 hover:text-white hover:bg-white/10"
+                    }`}
+                  >
+                    <FileCode className="w-3 h-3 inline mr-1" />
+                    Output
+                  </button>
+                )}
+              </div>
 
-                                let cssContent = '';
-                                try {
-                                  const cssRes = await fetch(`http://localhost:8000/files/index.css`);
-                                  if (cssRes.ok) cssContent = await cssRes.text();
-                                } catch (e) { /* ignore */ }
+              {/* Content Area - Single View */}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                
+                {/* Terminal View */}
+                {showTerminal && (
+                  <div className="flex-1 overflow-y-auto bg-card/10 font-mono text-xs">
+                    <div className="p-4 space-y-0 font-mono">
+                      {terminalLogs.length === 0 ? (
+                        <div className="text-white/40 py-8 text-center">
+                          Waiting for logs...
+                        </div>
+                      ) : (
+                        terminalLogs.map((log) => (
+                          <div key={log.id} className={`${getLevelColor(log.level)} hover:bg-white/5 py-0.5 px-2 leading-relaxed`}>
+                            <span className="text-white/50">[{log.timestamp}]</span>
+                            <span className="ml-2 font-semibold">{log.level}</span>
+                            <span className="ml-2">{log.line}</span>
+                          </div>
+                        ))
+                      )}
+                      <div ref={terminalEndRef}></div>
+                    </div>
+                  </div>
+                )}
 
-                                setFileContent(getReactPreviewContent(code, cssContent));
-                              } catch (e) {
-                                console.error("Error generating preview", e);
-                              }
-                            } else if (!newPreviewState && activeFile) {
-                              // Switching back to code view, fetch raw content
-                              const res = await fetch(`http://localhost:8000/files/${activeFile}`);
-                              const content = await res.text();
-                              setFileContent(content);
-                            }
-                          }}
-                          className="h-7 px-2 hover:bg-[#333] text-xs text-gray-300 flex items-center gap-1"
-                          title={isHtmlPreview ? 'View Code' : 'Preview'}
-                        >
-                          {isHtmlPreview ? (
+                {/* File Output View */}
+                {!showTerminal && isDone && (
+                  <>
+                    <div className="flex-1 overflow-auto bg-black/40">
+                      {!activeFile ? (
+                        <div className="h-full flex items-center justify-center text-white/40 text-sm">
+                          No file selected
+                        </div>
+                      ) : (
+                        <>
+                          {isImageFile(activeFile) && (
+                            <div className="h-full flex items-center justify-center p-4">
+                              <img
+                                src={`http://localhost:8000/files/${activeFile}`}
+                                className="max-w-full max-h-full object-contain"
+                              />
+                            </div>
+                          )}
+                          {!isImageFile(activeFile) && (
                             <>
-                              <Code className="w-3 h-3" />
-                              <span>Code</span>
-                            </>
-                          ) : (
-                            <>
-                              <Eye className="w-3 h-3" />
-                              <span>Preview</span>
+                              {isBinaryDoc(activeFile) ? (
+                                <div className="p-6 text-sm text-muted-foreground">
+                                  <p className="mb-3">This file is a binary document and cannot be previewed inline.</p>
+                                  <div className="flex gap-2">
+                                    <button onClick={() => openFileInNewTab(activeFile)} className="px-3 py-1 rounded-md bg-indigo-600 text-white">Open in new tab</button>
+                                    <a href={`http://localhost:8000/files/${activeFile}`} target="_blank" rel="noreferrer" download className="px-3 py-1 rounded-md bg-white/10 text-white">Download</a>
+                                  </div>
+                                </div>
+                              ) : (
+                                <pre className="p-4 text-xs text-white font-mono leading-relaxed whitespace-pre-wrap break-words">
+                                  {fileContent}
+                                </pre>
+                              )}
                             </>
                           )}
-                        </Button>
+                        </>
                       )}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowCodePanel(false)}
-                      className="h-6 w-6 p-0 hover:bg-[#333] flex-shrink-0"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
 
-                  {/* Content */}
-                  <div className="flex-1 overflow-hidden min-h-0 min-w-0">
-                    {activeFile ? (
-                      <>
-                        {isImageFile(activeFile) ? (
-                          <div className="h-full w-full overflow-auto p-4 flex items-center justify-center bg-[#1a1a1a]">
-                            <img
-                              src={`http://localhost:8000/files/${activeFile}`}
-                              alt={activeFile}
-                              className="max-w-full max-h-full object-contain"
-                            />
-                          </div>
-                        ) : (isHtmlFile(activeFile) || isReactFile(activeFile)) && isHtmlPreview ? (
-                          <div className="h-full w-full overflow-auto bg-white">
-                            <iframe
-                              srcDoc={fileContent}
-                              className="w-full h-full border-none"
-                              title="Preview"
-                              sandbox="allow-scripts allow-same-origin"
-                            />
-                          </div>
-                        ) : isPptxFile(activeFile) || isDocxFile(activeFile) || isBinaryFile(activeFile) ? (
-                          <div className="h-full w-full flex flex-col items-center justify-center gap-4 p-6 text-center">
-                            <div className="p-4 bg-primary/10 rounded-full">
-                              <FileCode className="w-12 h-12 text-primary" />
-                            </div>
-                            <div>
-                              <h3 className="text-lg font-medium text-foreground">
-                                {isPptxFile(activeFile) ? 'PowerPoint Presentation' :
-                                  isDocxFile(activeFile) ? 'Word Document' :
-                                    'Binary File'}
-                              </h3>
-                              <p className="text-sm text-muted-foreground mt-1">This file cannot be previewed directly.</p>
-                            </div>
-                            <Button
-                              onClick={() => window.open(`http://localhost:8000/files/${activeFile}`, '_blank')}
-                              className="gap-2"
-                            >
-                              <Download className="w-4 h-4" />
-                              Download File
-                            </Button>
-                          </div>
-                        ) : isPdfFile(activeFile) ? (
-                          <div className="h-full w-full overflow-hidden bg-zinc-900 flex flex-col">
-                            <iframe
-                              src={`http://localhost:8000/files/${activeFile}`}
-                              className="w-full h-full border-none"
-                              title="PDF Preview"
-                            />
-                          </div>
-                        ) : (
-                          <div className="h-full w-full overflow-auto min-w-0">
-                            <pre className="p-4 text-sm font-mono text-gray-300 leading-relaxed whitespace-pre-wrap break-words min-w-0">
-                              {fileContent}
-                            </pre>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-gray-500 text-sm">
-                        Select a file to view content
-                      </div>
-                    )}
-                  </div>
+                    {/* File Tabs - Only Images */}
+                    <div className="flex gap-1 px-2 py-1 bg-card/10 border-t border-border overflow-x-auto max-h-10">
+                      {files.filter((file) => isImageFile(file)).map((file) => (
+                        <button key={file} onClick={() => handleFileClick(file)}
+                          className={`px-2 py-0.5 text-xs rounded-md truncate transition whitespace-nowrap flex-shrink-0
+                            ${activeFile === file ? "bg-black text-indigo-400 border-b-2 border-indigo-500"
+                            : "text-white/50 hover:text-white hover:bg-white/10"}`}>
+                          {file}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
 
-                  {/* Tabs (Bottom) */}
-                  <div className="flex items-center gap-1 px-2 py-1 bg-[#252526] border-t border-[#333] overflow-x-auto flex-shrink-0">
-                    {files.map(file => (
-                      <button
-                        key={file}
-                        onClick={() => handleFileClick(file)}
-                        title={file}
-                        className={`px-3 py-1.5 text-xs rounded-t-md transition-colors flex items-center gap-2 max-w-[120px] ${activeFile === file
-                          ? 'bg-[#1e1e1e] text-white border-t-2 border-blue-500'
-                          : 'text-gray-400 hover:bg-[#333] hover:text-gray-200'
-                          }`}
-                      >
-                        <FileCode className="w-3 h-3 flex-shrink-0" />
-                        <span className="truncate">{file}</span>
-                      </button>
-                    ))}
-                    {files.length === 0 && (
-                      <span className="text-xs text-gray-500 px-2 py-1">No files generated</span>
-                    )}
-                  </div>
-                </div>
-              </Panel>
-            </>
-          )}
+              </div>
+
+            </div>
+          </Panel>
         </PanelGroup>
+
       </div>
     </div>
+  </div>
   );
 };

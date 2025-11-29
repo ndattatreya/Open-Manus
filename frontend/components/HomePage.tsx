@@ -21,7 +21,7 @@ import { ChatMessage, ChatSession } from '../App';
 import { useUser } from "@clerk/clerk-react";
 
 interface HomePageProps {
-  onNavigateToSandbox?: () => void;
+  onNavigateToSandbox?: (prompt?: string) => void;
   continueSession?: ChatSession | null;
 }
 
@@ -326,7 +326,13 @@ export function HomePage({ onNavigateToSandbox, continueSession }: HomePageProps
 
   const handleGenerate = () => {
     if (!prompt.trim()) return;
-    performGeneration(selectedOption || 'Text');
+    
+    // Pass prompt to sandbox and navigate
+    if (onNavigateToSandbox) {
+      onNavigateToSandbox(prompt);
+    } else {
+      performGeneration(selectedOption || 'Text');
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {

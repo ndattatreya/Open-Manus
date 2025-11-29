@@ -55,12 +55,6 @@ export function Navbar({ onToggleSidebar, onToggleAppPreview, showAppPreview, on
 
       {/* Right side */}
       <div className="flex items-center space-x-4">
-
-        {/* Notifications */}
-        <button className="p-2 hover:bg-muted/50 rounded-lg transition-colors">
-          <Bell className="w-5 h-5 text-foreground/70" />
-        </button>
-
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
