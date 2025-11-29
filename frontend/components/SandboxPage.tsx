@@ -15,6 +15,8 @@ import {
   Info,
   FileCode,
   Code as CodeIcon,
+  Sun,
+  Moon,
   X,
   MessageSquare,
   Eye,
@@ -75,6 +77,27 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false, initi
   const [terminalLogs, setTerminalLogs] = useState<TerminalLog[]>([]);
   const [showTerminal, setShowTerminal] = useState(true);
   const terminalEndRef = useRef<HTMLDivElement>(null);
+
+  // UI Theme + Responsive State
+  const [isLightMode, setIsLightMode] = useState(false);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  const theme = {
+    container: isLightMode ? 'bg-white text-black' : 'bg-background text-foreground',
+    card: isLightMode ? 'bg-white border border-gray-200' : 'bg-black/20 border border-white/10',
+    header: isLightMode ? 'bg-white/90' : 'bg-card/30',
+    botBubble: isLightMode ? 'bg-gray-100 text-black border border-gray-200' : 'bg-white/10 border border-white/10 text-white',
+    input: isLightMode ? 'bg-white text-black border border-gray-200' : 'bg-black/20 text-white border-white/20',
+    terminalBg: isLightMode ? 'bg-white text-black' : 'bg-card/10 text-white',
+    mutedText: isLightMode ? 'text-black/50' : 'text-white/40'
+  };
 
   // Load prompt if saved
   useEffect(() => {
@@ -200,6 +223,13 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false, initi
     setIsGenerating(true);
     setIsDone(false);
     setShowCodePanel(false); // Reset view on new generation
+
+    // Reset terminal and output panels when starting a new prompt
+    setTerminalLogs([]);
+    setShowTerminal(true);
+    setFiles([]);
+    setActiveFile(null);
+    setFileContent('');
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -545,16 +575,15 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false, initi
   const isHtmlFile = (filename: string) => {
     return /\.html?$/i.test(filename);
   };
-
-  const isPptxFile = (filename: string) => {
-    return /\.pptx$/i.test(filename);
-  };
-
   const isReactFile = (filename: string) => {
     return /\.(jsx|tsx)$/i.test(filename);
   };
 
   const isBinaryDoc = (filename: string) => /\.(pdf|pptx|ppt|docx|doc|xlsx|xls|odt|zip)$/i.test(filename);
+
+  const isPdfFile = (filename: string) => /\.pdf$/i.test(filename);
+  const isDocxFile = (filename: string) => /\.docx?$/i.test(filename);
+  const isPptxFile = (filename: string) => /\.pptx?$/i.test(filename);
 
   const openFileInNewTab = async (filename: string) => {
     try {
@@ -621,13 +650,58 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false, initi
     `;
   };
 
+  // Render message content with simple code-block handling
+  const renderMessageContent = (content?: string) => {
+    if (!content) return null;
+
+    // Split content into segments of code blocks ```lang\ncode``` and plain text
+    const parts: Array<{ type: 'text' | 'code'; lang?: string; text: string }> = [];
+    const regex = /```(\w+)?\n([\s\S]*?)```/g;
+    let lastIndex = 0;
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push({ type: 'text', text: content.slice(lastIndex, match.index) });
+      }
+      parts.push({ type: 'code', lang: match[1], text: match[2] });
+      lastIndex = regex.lastIndex;
+    }
+    if (lastIndex < content.length) {
+      parts.push({ type: 'text', text: content.slice(lastIndex) });
+    }
+
+    return (
+      <div>
+        {parts.map((p, i) => {
+          if (p.type === 'code') {
+            return (
+              <pre key={i} className="rounded-md bg-black/90 p-3 overflow-auto text-xs text-white font-mono my-2">
+                <code>{p.text}</code>
+              </pre>
+            );
+          }
+
+          // For plain text, preserve line breaks and simple inline code
+          const text = p.text
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .split('\n')
+            .map((line, idx) => (
+              <span key={idx} dangerouslySetInnerHTML={{ __html: line + (idx < p.text.split('\n').length - 1 ? '<br/>' : '') }} />
+            ));
+
+          return <div key={i} className="text-sm leading-relaxed">{text}</div>;
+        })}
+      </div>
+    );
+  };
+
   return (
-  <div className="flex-1 overflow-y-auto px-6 py-4 pt-4 bg-background text-foreground">
+  <div className={`flex-1 overflow-y-auto px-6 py-4 pt-4 ${theme.container}`}>
     {/* Workspace Card */}
-    <div className="flex flex-col h-[90vh] rounded-2xl border border-white/10 bg-black/20 backdrop-blur-md shadow-xl overflow-hidden">
+    <div className={`flex flex-col h-[90vh] rounded-2xl ${theme.card} backdrop-blur-md shadow-xl overflow-hidden`}>
 
       {/* Header */}
-      <div className="px-6 py-2 flex justify-between items-center bg-card/30 backdrop-blur-xl border-b border-border">
+      <div className={`px-6 py-2 flex justify-between items-center ${theme.header} backdrop-blur-xl border-b border-border`}>
         <div className="flex items-center gap-2">
           <div className="p-1.5 bg-indigo-500/10 rounded-lg">
             <Terminal className="w-4 h-4 text-indigo-400" />
@@ -637,13 +711,21 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false, initi
             <p className="text-xs text-white/60 font-medium">Run agent tasks & inspect output</p>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsLightMode(prev => !prev)}
+            title={isLightMode ? 'Switch to dark' : 'Switch to light'}
+            className={`p-1 rounded-md border ${isLightMode ? 'border-gray-200 bg-white' : 'border-transparent bg-white/5'}`}>
+            {isLightMode ? <Sun className="w-4 h-4 text-yellow-500" /> : <Moon className="w-4 h-4 text-indigo-300" />}
+          </button>
+        </div>
       </div>
 
       {/* Workspace Panels */}
       <div className="flex-1 flex overflow-hidden">
 
         {/* Left - Logs & Chat */}
-        <PanelGroup direction="horizontal" className="w-full">
+        <PanelGroup direction={isMobile ? 'vertical' : 'horizontal'} className="w-full">
           <Panel defaultSize={55} minSize={35}>
             <div className="flex flex-col h-full">
 
@@ -670,8 +752,8 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false, initi
 
                         {/* Bot content */}
                         {msg.role === "bot" && msg.content && (
-                          <div className="bg-white/10 border border-white/10 px-4 py-3 rounded-lg text-white shadow-sm">
-                            {msg.content}
+                          <div className={`px-4 py-3 rounded-lg shadow-sm ${isLightMode ? 'bg-gray-50 border border-gray-200 text-black' : 'bg-white/10 border border-white/10 text-white'}`}>
+                            {renderMessageContent(msg.content)}
                           </div>
                         )}
 
@@ -687,13 +769,13 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false, initi
               </div>
 
               {/* Input Bar */}
-              <div className="px-6 py-4 bg-card/20 border-t border-border backdrop-blur-lg">
+              <div className={`px-6 py-4 ${isLightMode ? 'bg-white' : 'bg-card/20'} border-t border-border backdrop-blur-lg`}>
                 <div className="flex gap-3 max-w-3xl mx-auto">
                   <Input
                     value={prompt}
                     onChange={(e) => { setPrompt(e.target.value); localStorage.setItem("navaSandboxPrompt", e.target.value); }}
                     placeholder="Describe what you want to generate…"
-                    className="bg-black/20 text-white border-white/20 rounded-xl placeholder:text-white/40"
+                    className={`${theme.input} rounded-xl placeholder:text-black/40`}
                     onKeyDown={(e) => e.key === "Enter" && handleSend()}
                   />
                   <Button onClick={handleSend} className="rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white">
@@ -708,7 +790,7 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false, initi
           {/* Output Panel */}
           <PanelResizeHandle className="w-1 bg-white/10 hover:bg-indigo-500 cursor-col-resize" />
           <Panel defaultSize={45} minSize={25}>
-            <div className="flex flex-col h-full border-l border-border bg-card/20 backdrop-blur-xl">
+            <div className={`flex flex-col h-full ${isLightMode ? 'border-l border-gray-200 bg-white' : 'border-l border-border bg-card/20'} backdrop-blur-xl`}>
 
               {/* Panel Header with Tabs */}
               <div className="px-4 py-2 border-b border-border flex gap-2">
@@ -743,16 +825,16 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false, initi
                 
                 {/* Terminal View */}
                 {showTerminal && (
-                  <div className="flex-1 overflow-y-auto bg-card/10 font-mono text-xs">
+                  <div className={`flex-1 overflow-y-auto ${isLightMode ? 'bg-white text-black' : 'bg-card/10 text-white'} font-mono text-xs`}>
                     <div className="p-4 space-y-0 font-mono">
                       {terminalLogs.length === 0 ? (
-                        <div className="text-white/40 py-8 text-center">
+                        <div className={`${theme.mutedText} py-8 text-center`}>
                           Waiting for logs...
                         </div>
                       ) : (
                         terminalLogs.map((log) => (
                           <div key={log.id} className={`${getLevelColor(log.level)} hover:bg-white/5 py-0.5 px-2 leading-relaxed`}>
-                            <span className="text-white/50">[{log.timestamp}]</span>
+                            <span className={`${isLightMode ? 'text-black/50' : 'text-white/50'}`}>[{log.timestamp}]</span>
                             <span className="ml-2 font-semibold">{log.level}</span>
                             <span className="ml-2">{log.line}</span>
                           </div>
@@ -766,7 +848,7 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false, initi
                 {/* File Output View */}
                 {!showTerminal && isDone && (
                   <>
-                    <div className="flex-1 overflow-auto bg-black/40">
+                    <div className={`flex-1 overflow-auto ${isLightMode ? 'bg-white' : 'bg-black/40'}`}>
                       {!activeFile ? (
                         <div className="h-full flex items-center justify-center text-white/40 text-sm">
                           No file selected
@@ -792,10 +874,10 @@ export const SandboxPage: React.FC<SandboxPageProps> = ({ autoRun = false, initi
                                   </div>
                                 </div>
                               ) : (
-                                <pre className="p-4 text-xs text-white font-mono leading-relaxed whitespace-pre-wrap break-words">
-                                  {fileContent}
-                                </pre>
-                              )}
+                                  <pre className={`p-4 text-xs ${isLightMode ? 'text-black' : 'text-white'} font-mono leading-relaxed whitespace-pre-wrap break-words`}>
+                                    {fileContent}
+                                  </pre>
+                                )}
                             </>
                           )}
                         </>
